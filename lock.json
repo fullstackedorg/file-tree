@@ -1,0 +1,14 @@
+{
+    "packages": [
+        {
+            "name": "eruda",
+            "version": "3.4.1",
+            "as": [
+                "^3.4.1"
+            ],
+            "location": [
+                "node_modules"
+            ]
+        }
+    ]
+}
