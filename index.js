@@ -38,12 +38,21 @@ function randomFileItem() {
 }
 
 function fakeDirectoryContent() {
-    const itemsCount = randomIntFromInterval(0, 10);
+    const itemsCount = randomIntFromInterval(1, 10);
     return new Array(itemsCount).fill(null).map(randomFileItem);
 }
 
+const cache = {}
+
 const { container } = createFileTree({
-    readDirectory: () => fakeDirectoryContent(),
+    readDirectory: (path) => {
+        let content = cache[path];
+        if(!content) {
+            content = fakeDirectoryContent();
+            cache[path] = content
+        }
+        return content;
+    },
 });
 
 document.body.append(container);
