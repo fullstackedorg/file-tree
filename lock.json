@@ -1,6 +1,16 @@
 {
     "packages": [
         {
+            "name": "@faker-js/faker",
+            "version": "9.4.0",
+            "as": [
+                "^9.4.0"
+            ],
+            "location": [
+                "node_modules"
+            ]
+        },
+        {
             "name": "eruda",
             "version": "3.4.1",
             "as": [

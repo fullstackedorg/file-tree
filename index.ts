@@ -1,33 +1,109 @@
+import "./file-tree.css";
+
 type CreateFileTreeOpts = {
     readDirectory: (path: string) => { name: string; isDirectory: boolean }[];
+    directoryIcons?: {
+        open: HTMLElement;
+        close: HTMLElement;
+    };
+    iconPrefix?: (fileItem: FileItem) => HTMLElement;
 };
+
+type FileItemCommon = {
+    path: string;
+    element?: HTMLElement;
+};
+
+type FileItemDirectory = FileItemCommon & {
+    type: "directory";
+    opened: boolean;
+};
+
+type FileItemFile = FileItemCommon & {
+    type: "file";
+};
+
+type FileItem = FileItemDirectory | FileItemFile;
 
 export function createFileTree(opts: CreateFileTreeOpts) {
     const container = document.createElement("div");
-    const flatFileList: {
-        path: string;
-        isDirectory: boolean;
-    }[] = [];
+    container.classList.add("file-tree");
 
-    const renderList = () => {
-        container.innerHTML = ``;
-        flatFileList.forEach(({ path, isDirectory }) => {
-            const depth = path.split("/").length - 2;
-            const div = document.createElement("div");
-            div.style.marginLeft = depth * 20 + "px";
-            div.innerText = path.split("/").pop();
-            container.append(div);
-            div.onclick = () => {
-                if (isDirectory) {
-                    openDirectory(path);
-                }
-            };
-        });
+    const flatFileList: FileItem[] = [];
+    const openedDirectory = new Set<string>();
+
+    const renderDirectoryIcon = (fileItem: FileItemDirectory) => {
+        const iconContainer = document.createElement("div");
+        iconContainer.classList.add("icon");
+        const icon = fileItem.opened
+            ? opts.directoryIcons?.open?.cloneNode(true) || "▼"
+            : opts.directoryIcons?.close?.cloneNode(true) || "▶";
+        iconContainer.append(icon);
+        return iconContainer;
     };
 
-    const openDirectory = (path: string) => {
+    const createItemElement = (fileItem: FileItem) => {
+        const depth = fileItem.path.split("/").length - 2;
+        fileItem.element = document.createElement("div");
+        fileItem.element.classList.add("file-item");
+
+        fileItem.element.style.marginLeft = depth * 20 + "px";
+
+        if (fileItem.type === "file" && opts.iconPrefix) {
+            const iconContainer = document.createElement("div");
+            iconContainer.classList.add("icon");
+            const icon = opts.iconPrefix(fileItem);
+            iconContainer.append(icon);
+            fileItem.element.append(iconContainer);
+        } else if (fileItem.type === "directory") {
+            fileItem.element.append(renderDirectoryIcon(fileItem));
+        }
+
+        const name = document.createElement("div");
+        name.innerText = fileItem.path.split("/").pop();
+        fileItem.element.append(name);
+
+        fileItem.element.onclick = () => {
+            if (fileItem.type === "directory") {
+                if (fileItem.opened) {
+                    closeDirectory(fileItem.path);
+                } else {
+                    openDirectory(fileItem.path);
+                }
+                fileItem.opened = !fileItem.opened;
+                fileItem.element
+                    .querySelector(".icon")
+                    .replaceWith(renderDirectoryIcon(fileItem));
+            }
+        };
+    };
+
+    const renderList = () => {
+        let lastSeenElement: HTMLElement = null;
+        for (let i = 0; i < flatFileList.length; i++) {
+            const fileItem = flatFileList[i];
+
+            if (!fileItem.element) {
+                createItemElement(fileItem);
+                if (lastSeenElement) {
+                    lastSeenElement.insertAdjacentElement(
+                        "afterend",
+                        fileItem.element,
+                    );
+                } else {
+                    container.append(fileItem.element);
+                }
+            }
+
+            lastSeenElement = fileItem.element;
+        }
+    };
+
+    const openDirectory = (path: string, rerender = true) => {
+        openedDirectory.add(path);
         const indexOfDirectory = flatFileList.findIndex((i) => i.path === path);
-        const content: typeof flatFileList = opts
+        const openedSubDirectories = new Set<string>();
+        const content: FileItem[] = opts
             .readDirectory(path)
             .sort((a, b) => {
                 if (a.isDirectory && !b.isDirectory) {
@@ -38,12 +114,39 @@ export function createFileTree(opts: CreateFileTreeOpts) {
                     return a.name < b.name ? -1 : 1;
                 }
             })
-            .map((i) => ({
-                path: path + "/" + i.name,
-                isDirectory: i.isDirectory,
-            }));
-        flatFileList.splice(indexOfDirectory + 1, 0, ...content);
+            .map((i) => {
+                const itemPath = path + "/" + i.name;
+                if (i.isDirectory) {
+                    if (openedDirectory.has(itemPath)) {
+                        openedSubDirectories.add(itemPath);
+                    }
 
+                    return {
+                        path: itemPath,
+                        type: "directory",
+                        opened: openedDirectory.has(itemPath),
+                    };
+                } else {
+                    return {
+                        path: itemPath,
+                        type: "file",
+                    };
+                }
+            });
+        flatFileList.splice(indexOfDirectory + 1, 0, ...content);
+        openedSubDirectories.forEach((d) => openDirectory(d, false));
+        if (rerender) {
+            renderList();
+        }
+    };
+
+    const closeDirectory = (path: string) => {
+        openedDirectory.delete(path);
+        const removed = filterInPlace(
+            flatFileList,
+            (i) => !i.path.startsWith(path) || i.path.length <= path.length,
+        );
+        removed.forEach((i) => i.element.remove());
         renderList();
     };
 
@@ -52,4 +155,27 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     return {
         container,
     };
+}
+
+function filterInPlace<T>(
+    a: T[],
+    condition: (v: T, i: number, arr: T[]) => boolean,
+): T[] {
+    let i = 0,
+        j = 0;
+
+    const r: T[] = [];
+    while (i < a.length) {
+        const val = a[i];
+        if (condition(val, i, a)) {
+            a[j++] = val;
+        } else {
+            r.push(val);
+        }
+        i++;
+    }
+
+    a.length = j;
+
+    return r;
 }

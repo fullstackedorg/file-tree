@@ -1,0 +1,10 @@
+.file-tree .file-item {
+    display: flex;
+    align-items: center
+}
+
+.file-tree .file-item .icon {
+    height: 20px;
+    width: 20px;
+    overflow: hidden;
+}
