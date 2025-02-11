@@ -14,10 +14,7 @@ type CreateFileTreeOpts = {
 
 type FileItemCommon = {
     path: string;
-    elements?: {
-        iconAndName: HTMLElement;
-        action: HTMLElement;
-    };
+    element?: HTMLElement;
 };
 
 type FileItemDirectory = FileItemCommon & {
@@ -38,25 +35,20 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     const itemHeight = opts.itemHeight || 25;
     const indentWidth = opts.indentWidth || 20;
 
-    const iconsAndNames = document.createElement("div");
     const scrollable = document.createElement("div");
-    scrollable.classList.add("names-scrollable");
+    scrollable.classList.add("scrollable");
     container.append(scrollable);
-    iconsAndNames.classList.add("names");
-    scrollable.append(iconsAndNames);
 
-    let actions: HTMLDivElement;
-    if (opts.actionSuffix) {
-        actions = document.createElement("div");
-        actions.classList.add("actions");
-        container.append(actions);
-    }
+    const fileItems = document.createElement("div");
+    fileItems.classList.add("file-items");
+    scrollable.append(fileItems);
 
     const flatFileList: FileItem[] = [];
     const openedDirectory = new Set<string>();
 
     let lastActive: {
         element: HTMLElement;
+        action?: HTMLElement;
         path: string;
     };
     const setActive = (path?: string) => {
@@ -68,14 +60,28 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         element.style.top = itemHeight * indexOf + "px";
         element.style.height = itemHeight + "px";
 
-        if(!lastActive?.element) {
-            container.append(element)
+        let action: HTMLElement;
+        if (opts.actionSuffix) {
+            action = document.createElement("div");
+            action.classList.add("action");
+            action.append(opts.actionSuffix(flatFileList.at(indexOf)));
+
+            if (lastActive?.action) {
+                lastActive.action.replaceWith(action);
+            } else {
+                element.append(action);
+            }
+        }
+
+        if (!lastActive?.element) {
+            fileItems.append(element);
         }
 
         lastActive = {
             element,
-            path
-        }
+            action,
+            path,
+        };
     };
 
     const renderDirectoryIcon = (fileItem: FileItemDirectory) => {
@@ -90,11 +96,12 @@ export function createFileTree(opts: CreateFileTreeOpts) {
 
     const createItemElements = (fileItem: FileItem) => {
         const depth = fileItem.path.split("/").length - 2;
-        const iconAndName = document.createElement("div");
+        fileItem.element = document.createElement("div");
+        fileItem.element.classList.add("file-item");
 
-        iconAndName.style.height = itemHeight + "px";
+        fileItem.element.style.height = itemHeight + "px";
 
-        iconAndName.append(
+        fileItem.element.append(
             ...new Array(depth).fill(null).map(() => {
                 const indentSpace = document.createElement("div");
                 indentSpace.style.width = indentWidth + "px";
@@ -111,16 +118,16 @@ export function createFileTree(opts: CreateFileTreeOpts) {
             iconContainer.classList.add("icon");
             const icon = opts.iconPrefix(fileItem);
             iconContainer.append(icon);
-            iconAndName.append(iconContainer);
+            fileItem.element.append(iconContainer);
         } else if (fileItem.type === "directory") {
-            iconAndName.append(renderDirectoryIcon(fileItem));
+            fileItem.element.append(renderDirectoryIcon(fileItem));
         }
 
         const name = document.createElement("div");
         name.innerText = fileItem.path.split("/").pop();
-        iconAndName.append(name);
+        fileItem.element.append(name);
 
-        iconAndName.onclick = () => {
+        fileItem.element.onclick = () => {
             if (fileItem.type === "directory") {
                 if (fileItem.opened) {
                     closeDirectory(fileItem.path);
@@ -128,56 +135,39 @@ export function createFileTree(opts: CreateFileTreeOpts) {
                     openDirectory(fileItem.path);
                 }
                 fileItem.opened = !fileItem.opened;
-                iconAndName
+                fileItem.element
                     .querySelector(".icon")
                     .replaceWith(renderDirectoryIcon(fileItem));
             }
             setActive(fileItem.path);
         };
 
-        let action: HTMLElement;
         if (opts.actionSuffix) {
-            action = document.createElement("div");
+            const action = document.createElement("div");
             action.classList.add("action");
-            action.style.height = itemHeight + "px";
             action.append(opts.actionSuffix(fileItem));
-            iconAndName.append(action.cloneNode(true));
+            fileItem.element.append(action);
         }
-
-        fileItem.elements = {
-            iconAndName,
-            action,
-        };
     };
 
     const renderList = () => {
-        let lastSeenElements: {
-            iconAndName: HTMLElement;
-            action: HTMLElement;
-        } = null;
+        let lastSeenElement: HTMLElement = null;
         for (let i = 0; i < flatFileList.length; i++) {
             const fileItem = flatFileList[i];
 
-            if (!fileItem.elements) {
+            if (!fileItem.element) {
                 createItemElements(fileItem);
-                if (lastSeenElements) {
-                    lastSeenElements.iconAndName.insertAdjacentElement(
+                if (lastSeenElement) {
+                    lastSeenElement.insertAdjacentElement(
                         "afterend",
-                        fileItem.elements.iconAndName,
+                        fileItem.element,
                     );
-                    if (fileItem.elements.action) {
-                        lastSeenElements.action.insertAdjacentElement(
-                            "afterend",
-                            fileItem.elements.action,
-                        );
-                    }
                 } else {
-                    iconsAndNames.append(fileItem.elements.iconAndName);
-                    actions.append(fileItem.elements.action);
+                    fileItems.append(fileItem.element);
                 }
             }
 
-            lastSeenElements = fileItem.elements;
+            lastSeenElement = fileItem.element;
         }
     };
 
@@ -228,10 +218,7 @@ export function createFileTree(opts: CreateFileTreeOpts) {
             flatFileList,
             (i) => !i.path.startsWith(path) || i.path.length <= path.length,
         );
-        removed.forEach((i) => {
-            i.elements.iconAndName.remove();
-            i.elements.action?.remove();
-        });
+        removed.forEach((i) => i.element?.remove());
         renderList();
     };
 

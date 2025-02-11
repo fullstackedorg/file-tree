@@ -1,58 +1,61 @@
 .file-tree {
     width: 100%;
+    height: 100%;
     position: relative;
 }
 
-.file-tree > .actions {
-    position: absolute;
-    right: 0;
-    top: 0;
-}
-
-.file-tree .action {
-    display: flex;
-    align-items: center;
-}
-
-.file-tree > .names-scrollable {
+.file-tree > .scrollable {
     width: 100%;
+    height: 100%;
     overflow: auto;
+    position: relative;
 }
 
-.file-tree > .names-scrollable > .names {
+.file-tree > .scrollable > .file-items {
     width: max-content;
     min-width: 100%;
+    position: relative;
 }
 
-.file-tree > .names-scrollable > .names .action {
+.file-tree > .scrollable > .file-items > .file-item > .action {
     opacity: 0;
     pointer-events: none;
 }
 
-.file-tree > .names-scrollable > .names > div {
+.file-tree > .scrollable > .file-items > .file-item {
     display: flex;
     align-items: center;
     width: 100%;
 }
 
-.file-tree > .names-scrollable > .names > div:hover {
+.file-tree > .scrollable > .file-items > .file-item:hover {
     background-color: gray;
 }
 
-.file-tree > .names-scrollable > .names .indent {
+.file-tree > .scrollable > .file-items > .file-item .indent {
     height: 100%;
 }
 
-.file-tree > .names-scrollable > .names .indent > div {
+.file-tree > .scrollable > .file-items > .file-item > .indent > div {
     height: 100%;
     width: 50%;
-    border-right: 1px dashed white;
+    border-right: 1px solid white;
+    opacity: 0.2;
 }
 
-.file-tree > .active {
+.file-tree .active {
     position: absolute;
     background-color: rgba(0, 0, 250, 0.2);
     border: 1 px solid blue;
     width: 100%;
     pointer-events: none;
+}
+
+.file-tree .active > .action {
+    height: 100%;
+    position: absolute;
+    display: flex;
+    align-items: center;
+    right: 0;
+    top: 0;
 }
