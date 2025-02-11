@@ -2,16 +2,22 @@ import "./file-tree.css";
 
 type CreateFileTreeOpts = {
     readDirectory: (path: string) => { name: string; isDirectory: boolean }[];
+    itemHeight?: number;
+    indentWidth?: number;
     directoryIcons?: {
         open: HTMLElement;
         close: HTMLElement;
     };
+    actionSuffix?: (fileItem: FileItem) => HTMLElement;
     iconPrefix?: (fileItem: FileItem) => HTMLElement;
 };
 
 type FileItemCommon = {
     path: string;
-    element?: HTMLElement;
+    elements?: {
+        iconAndName: HTMLElement;
+        action: HTMLElement;
+    };
 };
 
 type FileItemDirectory = FileItemCommon & {
@@ -29,6 +35,20 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     const container = document.createElement("div");
     container.classList.add("file-tree");
 
+    const itemHeight = opts.itemHeight || 25;
+    const indentWidth = opts.indentWidth || 20;
+
+    const iconsAndNames = document.createElement("div");
+    iconsAndNames.classList.add("names");
+    container.append(iconsAndNames);
+
+    let actions: HTMLDivElement;
+    if (opts.actionSuffix) {
+        actions = document.createElement("div");
+        actions.classList.add("actions");
+        container.append(actions);
+    }
+
     const flatFileList: FileItem[] = [];
     const openedDirectory = new Set<string>();
 
@@ -36,34 +56,34 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         const iconContainer = document.createElement("div");
         iconContainer.classList.add("icon");
         const icon = fileItem.opened
-            ? opts.directoryIcons?.open?.cloneNode(true) || "▼"
-            : opts.directoryIcons?.close?.cloneNode(true) || "▶";
+            ? opts.directoryIcons?.open?.cloneNode(true) || ">"
+            : opts.directoryIcons?.close?.cloneNode(true) || "V";
         iconContainer.append(icon);
         return iconContainer;
     };
 
-    const createItemElement = (fileItem: FileItem) => {
+    const createItemElements = (fileItem: FileItem) => {
         const depth = fileItem.path.split("/").length - 2;
-        fileItem.element = document.createElement("div");
-        fileItem.element.classList.add("file-item");
+        const iconAndName = document.createElement("div");
 
-        fileItem.element.style.marginLeft = depth * 20 + "px";
+        iconAndName.style.height = itemHeight + "px";
+        iconAndName.style.marginLeft = depth * indentWidth + "px";
 
         if (fileItem.type === "file" && opts.iconPrefix) {
             const iconContainer = document.createElement("div");
             iconContainer.classList.add("icon");
             const icon = opts.iconPrefix(fileItem);
             iconContainer.append(icon);
-            fileItem.element.append(iconContainer);
+            iconAndName.append(iconContainer);
         } else if (fileItem.type === "directory") {
-            fileItem.element.append(renderDirectoryIcon(fileItem));
+            iconAndName.append(renderDirectoryIcon(fileItem));
         }
 
         const name = document.createElement("div");
         name.innerText = fileItem.path.split("/").pop();
-        fileItem.element.append(name);
+        iconAndName.append(name);
 
-        fileItem.element.onclick = () => {
+        iconAndName.onclick = () => {
             if (fileItem.type === "directory") {
                 if (fileItem.opened) {
                     closeDirectory(fileItem.path);
@@ -71,31 +91,55 @@ export function createFileTree(opts: CreateFileTreeOpts) {
                     openDirectory(fileItem.path);
                 }
                 fileItem.opened = !fileItem.opened;
-                fileItem.element
+                iconAndName
                     .querySelector(".icon")
                     .replaceWith(renderDirectoryIcon(fileItem));
             }
         };
+
+        let action: HTMLElement;
+        if (opts.actionSuffix) {
+            action = document.createElement("div");
+            action.classList.add("action");
+            action.style.height = itemHeight + "px";
+            action.append(opts.actionSuffix(fileItem));
+            iconAndName.append(action.cloneNode(true));
+        }
+
+        fileItem.elements = {
+            iconAndName,
+            action,
+        };
     };
 
     const renderList = () => {
-        let lastSeenElement: HTMLElement = null;
+        let lastSeenElements: {
+            iconAndName: HTMLElement;
+            action: HTMLElement;
+        } = null;
         for (let i = 0; i < flatFileList.length; i++) {
             const fileItem = flatFileList[i];
 
-            if (!fileItem.element) {
-                createItemElement(fileItem);
-                if (lastSeenElement) {
-                    lastSeenElement.insertAdjacentElement(
+            if (!fileItem.elements) {
+                createItemElements(fileItem);
+                if (lastSeenElements) {
+                    lastSeenElements.iconAndName.insertAdjacentElement(
                         "afterend",
-                        fileItem.element,
+                        fileItem.elements.iconAndName,
                     );
+                    if (fileItem.elements.action) {
+                        lastSeenElements.action.insertAdjacentElement(
+                            "afterend",
+                            fileItem.elements.action,
+                        );
+                    }
                 } else {
-                    container.append(fileItem.element);
+                    iconsAndNames.append(fileItem.elements.iconAndName);
+                    actions.append(fileItem.elements.action);
                 }
             }
 
-            lastSeenElement = fileItem.element;
+            lastSeenElements = fileItem.elements;
         }
     };
 
@@ -111,7 +155,7 @@ export function createFileTree(opts: CreateFileTreeOpts) {
                 } else if (!a.isDirectory && b.isDirectory) {
                     return 1;
                 } else {
-                    return a.name < b.name ? -1 : 1;
+                    return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1;
                 }
             })
             .map((i) => {
@@ -146,7 +190,10 @@ export function createFileTree(opts: CreateFileTreeOpts) {
             flatFileList,
             (i) => !i.path.startsWith(path) || i.path.length <= path.length,
         );
-        removed.forEach((i) => i.element.remove());
+        removed.forEach((i) => {
+            i.elements.iconAndName.remove();
+            i.elements.action?.remove();
+        });
         renderList();
     };
 

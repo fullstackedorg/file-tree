@@ -26,9 +26,9 @@ const cache = {};
 const iconCache = {};
 
 const directoryIconOpen = document.createElement("div");
-directoryIconOpen.innerText = "V"
+directoryIconOpen.innerText = "🔽"
 const directoryIconClose = document.createElement("div");
-directoryIconClose.innerText = ">"
+directoryIconClose.innerText = "▶️"
 
 const { container } = createFileTree({
     readDirectory: (path) => {
@@ -53,6 +53,11 @@ const { container } = createFileTree({
         img.src = imgSrc;
         return img;
     },
+    actionSuffix: (fileItem) => {
+        const div = document.createElement("div");
+        div.innerText = "···"
+        return div
+    }
 });
 
 document.body.append(container);
