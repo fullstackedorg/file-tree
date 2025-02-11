@@ -46,7 +46,7 @@
 .file-tree .active {
     position: absolute;
     background-color: rgba(0, 0, 250, 0.2);
-    border: 1 px solid blue;
+    border: 1px solid blue;
     width: 100%;
     pointer-events: none;
 }
