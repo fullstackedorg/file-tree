@@ -39,8 +39,11 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     const indentWidth = opts.indentWidth || 20;
 
     const iconsAndNames = document.createElement("div");
+    const scrollable = document.createElement("div");
+    scrollable.classList.add("names-scrollable");
+    container.append(scrollable);
     iconsAndNames.classList.add("names");
-    container.append(iconsAndNames);
+    scrollable.append(iconsAndNames);
 
     let actions: HTMLDivElement;
     if (opts.actionSuffix) {
@@ -51,6 +54,29 @@ export function createFileTree(opts: CreateFileTreeOpts) {
 
     const flatFileList: FileItem[] = [];
     const openedDirectory = new Set<string>();
+
+    let lastActive: {
+        element: HTMLElement;
+        path: string;
+    };
+    const setActive = (path?: string) => {
+        path = path || lastActive.path;
+        const indexOf = flatFileList.findIndex((i) => i.path === path);
+
+        const element = lastActive?.element || document.createElement("div");
+        element.classList.add("active");
+        element.style.top = itemHeight * indexOf + "px";
+        element.style.height = itemHeight + "px";
+
+        if(!lastActive?.element) {
+            container.append(element)
+        }
+
+        lastActive = {
+            element,
+            path
+        }
+    };
 
     const renderDirectoryIcon = (fileItem: FileItemDirectory) => {
         const iconContainer = document.createElement("div");
@@ -67,7 +93,18 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         const iconAndName = document.createElement("div");
 
         iconAndName.style.height = itemHeight + "px";
-        iconAndName.style.marginLeft = depth * indentWidth + "px";
+
+        iconAndName.append(
+            ...new Array(depth).fill(null).map(() => {
+                const indentSpace = document.createElement("div");
+                indentSpace.style.width = indentWidth + "px";
+                indentSpace.style.minWidth = indentWidth + "px";
+                indentSpace.classList.add("indent");
+                const line = document.createElement("div");
+                indentSpace.append(line);
+                return indentSpace;
+            }),
+        );
 
         if (fileItem.type === "file" && opts.iconPrefix) {
             const iconContainer = document.createElement("div");
@@ -95,6 +132,7 @@ export function createFileTree(opts: CreateFileTreeOpts) {
                     .querySelector(".icon")
                     .replaceWith(renderDirectoryIcon(fileItem));
             }
+            setActive(fileItem.path);
         };
 
         let action: HTMLElement;

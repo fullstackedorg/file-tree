@@ -14,17 +14,45 @@
     align-items: center;
 }
 
-.file-tree > .names {
+.file-tree > .names-scrollable {
     width: 100%;
     overflow: auto;
 }
 
-.file-tree > .names .action {
+.file-tree > .names-scrollable > .names {
+    width: max-content;
+    min-width: 100%;
+}
+
+.file-tree > .names-scrollable > .names .action {
     opacity: 0;
     pointer-events: none;
 }
 
-.file-tree > .names > div {
+.file-tree > .names-scrollable > .names > div {
     display: flex;
     align-items: center;
+    width: 100%;
+}
+
+.file-tree > .names-scrollable > .names > div:hover {
+    background-color: gray;
+}
+
+.file-tree > .names-scrollable > .names .indent {
+    height: 100%;
+}
+
+.file-tree > .names-scrollable > .names .indent > div {
+    height: 100%;
+    width: 50%;
+    border-right: 1px dashed white;
+}
+
+.file-tree > .active {
+    position: absolute;
+    background-color: rgba(0, 0, 250, 0.2);
+    border: 1 px solid blue;
+    width: 100%;
+    pointer-events: none;
 }
