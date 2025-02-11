@@ -7,7 +7,7 @@ function randomIntFromInterval(min, max) {
     return Math.floor(Math.random() * (max - min + 1) + min);
 }
 
-function randomFileItem() {
+function randomFileItem(_, i) {
     const isFile = Math.random() >= 0.5;
     return {
         name: isFile
@@ -26,11 +26,11 @@ const cache = {};
 const iconCache = {};
 
 const directoryIconOpen = document.createElement("div");
-directoryIconOpen.innerText = "🔽"
+directoryIconOpen.innerText = "🔽";
 const directoryIconClose = document.createElement("div");
-directoryIconClose.innerText = "▶️"
+directoryIconClose.innerText = "▶️";
 
-const { container } = createFileTree({
+const fileTree = createFileTree({
     readDirectory: async (path) => {
         let content = cache[path];
         if (!content) {
@@ -55,9 +55,31 @@ const { container } = createFileTree({
     },
     actionSuffix: (fileItem) => {
         const div = document.createElement("div");
-        div.innerText = "···"
-        return div
-    }
+        div.innerText = "···";
+        div.onclick = e => {
+            e.stopPropagation();
+            console.log(fileItem)
+        }
+        return div;
+    },
 });
 
-document.body.append(container);
+document.body.append(fileTree.container);
+
+const input = document.createElement("input");
+const add = document.createElement("button");
+add.innerText = "Add";
+add.onclick = () => {
+    const v = input.value;
+    fileTree.addItem(v);
+    input.value = "";
+};
+const remove = document.createElement("button");
+remove.innerText = "Remove";
+remove.onclick = () => {
+    const v = input.value;
+    fileTree.removeItem(v);
+    input.value = "";
+};
+
+document.body.append(input, add, remove)

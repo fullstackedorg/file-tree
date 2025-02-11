@@ -58,4 +58,5 @@
     align-items: center;
     right: 0;
     top: 0;
+    pointer-events: all;
 }

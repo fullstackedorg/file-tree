@@ -1,6 +1,6 @@
 import "./file-tree.css";
 
-type RawFileItem = { name: string; isDirectory: boolean }
+type RawFileItem = { name: string; isDirectory: boolean };
 
 type CreateFileTreeOpts = {
     readDirectory: (path: string) => RawFileItem[] | Promise<RawFileItem[]>;
@@ -21,7 +21,6 @@ type FileItemCommon = {
 
 type FileItemDirectory = FileItemCommon & {
     type: "directory";
-    opened: boolean;
 };
 
 type FileItemFile = FileItemCommon & {
@@ -89,9 +88,9 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     const renderDirectoryIcon = (fileItem: FileItemDirectory) => {
         const iconContainer = document.createElement("div");
         iconContainer.classList.add("icon");
-        const icon = fileItem.opened
-            ? opts.directoryIcons?.open?.cloneNode(true) || ">"
-            : opts.directoryIcons?.close?.cloneNode(true) || "V";
+        const icon = openedDirectory.has(fileItem.path)
+            ? opts.directoryIcons?.open?.cloneNode(true) || "V"
+            : opts.directoryIcons?.close?.cloneNode(true) || ">";
         iconContainer.append(icon);
         return iconContainer;
     };
@@ -131,12 +130,11 @@ export function createFileTree(opts: CreateFileTreeOpts) {
 
         fileItem.element.onclick = () => {
             if (fileItem.type === "directory") {
-                if (fileItem.opened) {
+                if (openedDirectory.has(fileItem.path)) {
                     closeDirectory(fileItem.path);
                 } else {
                     openDirectory(fileItem.path);
                 }
-                fileItem.opened = !fileItem.opened;
                 fileItem.element
                     .querySelector(".icon")
                     .replaceWith(renderDirectoryIcon(fileItem));
@@ -173,20 +171,19 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         }
     };
 
-    const openDirectory = async (path: string, rerender = true) => {
+    const openDirectory = async (path: string, render = true) => {
         openedDirectory.add(path);
         const indexOfDirectory = flatFileList.findIndex((i) => i.path === path);
-        const openedSubDirectories: string[] = [];
 
         let contentRaw: RawFileItem[];
         const directoryRead = opts.readDirectory(path);
-        if(directoryRead instanceof Promise) {
-            contentRaw = await directoryRead
+        if (directoryRead instanceof Promise) {
+            contentRaw = await directoryRead;
         } else {
-            contentRaw = directoryRead
+            contentRaw = directoryRead;
         }
-        
-        const content: FileItem[] = contentRaw
+
+        const content: RawFileItem[] = contentRaw
             .sort((a, b) => {
                 if (a.isDirectory && !b.isDirectory) {
                     return -1;
@@ -196,47 +193,60 @@ export function createFileTree(opts: CreateFileTreeOpts) {
                     return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1;
                 }
             })
-            .map((i) => {
-                const itemPath = path + "/" + i.name;
-                if (i.isDirectory) {
-                    if (openedDirectory.has(itemPath)) {
-                        openedSubDirectories.push(itemPath);
-                    }
+            .reverse();
 
-                    return {
-                        path: itemPath,
-                        type: "directory",
-                        opened: openedDirectory.has(itemPath),
-                    };
-                } else {
-                    return {
-                        path: itemPath,
-                        type: "file",
-                    };
-                }
+        for (let i = 0; i < content.length; i++) {
+            const item = content[i];
+            const itemPath = path + "/" + item.name;
+
+            flatFileList.splice(indexOfDirectory + 1, 0, {
+                type: item.isDirectory ? "directory" : "file",
+                path: itemPath,
             });
-        flatFileList.splice(indexOfDirectory + 1, 0, ...content);
-        const openSubDirectoryPromises = openedSubDirectories.map((d) => openDirectory(d, false));
-        await Promise.all(openSubDirectoryPromises)
-        if (rerender) {
+
+            if (item.isDirectory) {
+                if (openedDirectory.has(itemPath)) {
+                    await openDirectory(itemPath, false);
+                }
+            }
+        }
+
+        if (render) {
             renderList();
         }
     };
 
-    const closeDirectory = (path: string) => {
+    const closeDirectory = (path: string, remove = false) => {
         openedDirectory.delete(path);
-        const removed = filterInPlace(
-            flatFileList,
-            (i) => !i.path.startsWith(path) || i.path.length <= path.length,
-        );
+
+        const pathComponents = path.split("/");
+        const removed = filterInPlace(flatFileList, (item) => {
+            const itemPathComponents = item.path.split("/");
+            if (itemPathComponents.length <= pathComponents.length && !remove) {
+                return true;
+            }
+
+            for (let i = 0; i < pathComponents.length; i++) {
+                if (itemPathComponents[i] !== pathComponents[i]) return true;
+            }
+            return false;
+        });
         removed.forEach((i) => i.element?.remove());
         renderList();
     };
+
+    const addItem = (path: string) => {
+        
+    };
+
+    const removeItem = (path: string) => closeDirectory(path, true);
 
     openDirectory("");
 
     return {
         container,
+        addItem,
+        removeItem,
     };
 }
 
