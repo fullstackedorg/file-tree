@@ -1,7 +1,9 @@
 import "./file-tree.css";
 
+type RawFileItem = { name: string; isDirectory: boolean }
+
 type CreateFileTreeOpts = {
-    readDirectory: (path: string) => { name: string; isDirectory: boolean }[];
+    readDirectory: (path: string) => RawFileItem[] | Promise<RawFileItem[]>;
     itemHeight?: number;
     indentWidth?: number;
     directoryIcons?: {
@@ -171,12 +173,20 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         }
     };
 
-    const openDirectory = (path: string, rerender = true) => {
+    const openDirectory = async (path: string, rerender = true) => {
         openedDirectory.add(path);
         const indexOfDirectory = flatFileList.findIndex((i) => i.path === path);
-        const openedSubDirectories = new Set<string>();
-        const content: FileItem[] = opts
-            .readDirectory(path)
+        const openedSubDirectories: string[] = [];
+
+        let contentRaw: RawFileItem[];
+        const directoryRead = opts.readDirectory(path);
+        if(directoryRead instanceof Promise) {
+            contentRaw = await directoryRead
+        } else {
+            contentRaw = directoryRead
+        }
+        
+        const content: FileItem[] = contentRaw
             .sort((a, b) => {
                 if (a.isDirectory && !b.isDirectory) {
                     return -1;
@@ -190,7 +200,7 @@ export function createFileTree(opts: CreateFileTreeOpts) {
                 const itemPath = path + "/" + i.name;
                 if (i.isDirectory) {
                     if (openedDirectory.has(itemPath)) {
-                        openedSubDirectories.add(itemPath);
+                        openedSubDirectories.push(itemPath);
                     }
 
                     return {
@@ -206,7 +216,8 @@ export function createFileTree(opts: CreateFileTreeOpts) {
                 }
             });
         flatFileList.splice(indexOfDirectory + 1, 0, ...content);
-        openedSubDirectories.forEach((d) => openDirectory(d, false));
+        const openSubDirectoryPromises = openedSubDirectories.map((d) => openDirectory(d, false));
+        await Promise.all(openSubDirectoryPromises)
         if (rerender) {
             renderList();
         }

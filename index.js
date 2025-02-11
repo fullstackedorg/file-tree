@@ -31,7 +31,7 @@ const directoryIconClose = document.createElement("div");
 directoryIconClose.innerText = "▶️"
 
 const { container } = createFileTree({
-    readDirectory: (path) => {
+    readDirectory: async (path) => {
         let content = cache[path];
         if (!content) {
             content = fakeDirectoryContent();
