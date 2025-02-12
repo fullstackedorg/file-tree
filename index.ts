@@ -12,10 +12,11 @@ type CreateFileTreeOpts = {
     };
     actionSuffix?: (fileItem: FileItem) => HTMLElement;
     iconPrefix?: (fileItem: FileItem) => HTMLElement;
+    onSelect?: (fileItem: FileItem) => void;
 };
 
 type FileItemCommon = {
-    path: string;
+    path: Path;
     element?: HTMLElement;
 };
 
@@ -28,6 +29,69 @@ type FileItemFile = FileItemCommon & {
 };
 
 type FileItem = FileItemDirectory | FileItemFile;
+
+type Path = {
+    components: string[];
+    equals: (path: Path) => boolean;
+    isParentOf: (path: Path) => boolean;
+    isChildOf: (path: Path) => boolean;
+    isDirectParentOf: (path: Path) => boolean;
+    isDirectChildOf: (path: Path) => boolean;
+    createChildPath: (name: string) => Path;
+    toString: () => string;
+};
+
+function arrEqual<T>(arr1: T[], arr2: T[]) {
+    if (arr1.length !== arr2.length) {
+        return false;
+    }
+
+    for (let i = 0; i < arr1.length; i++) {
+        if (arr1[i] !== arr2[i]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function isPathParentOfPath(parent: Path, child: Path) {
+    if (parent.components.length >= child.components.length) {
+        return false;
+    }
+
+    return arrEqual(
+        parent.components,
+        child.components.slice(0, parent.components.length),
+    );
+}
+
+function isPathDirectParentOfPath(parent: Path, child: Path) {
+    if (child.components.length - parent.components.length !== 1) {
+        return false;
+    }
+
+    return arrEqual(parent.components, child.components.slice(0, -1));
+}
+
+function createPath(pathStr: string): Path {
+    return createPathWithComponents(pathStr.split("/"));
+}
+
+function createPathWithComponents(components: string[]): Path {
+    const p: Path = {
+        components,
+        equals: (path) => arrEqual(components, path.components),
+        isParentOf: (path) => isPathParentOfPath(p, path),
+        isChildOf: (path) => isPathParentOfPath(path, p),
+        isDirectParentOf: (path) => isPathDirectParentOfPath(p, path),
+        isDirectChildOf: (path) => isPathDirectParentOfPath(path, p),
+        createChildPath: (name) =>
+            createPathWithComponents([...components, name]),
+        toString: () => components.join("/"),
+    };
+    return p;
+}
 
 export function createFileTree(opts: CreateFileTreeOpts) {
     const container = document.createElement("div");
@@ -50,11 +114,11 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     let lastActive: {
         element: HTMLElement;
         action?: HTMLElement;
-        path: string;
+        path: Path;
     };
-    const setActive = (path?: string) => {
+    const setActive = (path?: Path) => {
         path = path || lastActive.path;
-        const indexOf = flatFileList.findIndex((i) => i.path === path);
+        const indexOf = flatFileList.findIndex((i) => i.path.equals(path));
 
         const element = lastActive?.element || document.createElement("div");
         element.classList.add("active");
@@ -83,12 +147,14 @@ export function createFileTree(opts: CreateFileTreeOpts) {
             action,
             path,
         };
+
+        opts.onSelect?.(flatFileList[indexOf]);
     };
 
     const renderDirectoryIcon = (fileItem: FileItemDirectory) => {
         const iconContainer = document.createElement("div");
         iconContainer.classList.add("icon");
-        const icon = openedDirectory.has(fileItem.path)
+        const icon = openedDirectory.has(fileItem.path.toString())
             ? opts.directoryIcons?.open?.cloneNode(true) || "V"
             : opts.directoryIcons?.close?.cloneNode(true) || ">";
         iconContainer.append(icon);
@@ -96,7 +162,7 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     };
 
     const createItemElements = (fileItem: FileItem) => {
-        const depth = fileItem.path.split("/").length - 2;
+        const depth = fileItem.path.components.length - 2;
         fileItem.element = document.createElement("div");
         fileItem.element.classList.add("file-item");
 
@@ -125,12 +191,12 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         }
 
         const name = document.createElement("div");
-        name.innerText = fileItem.path.split("/").pop();
+        name.innerText = fileItem.path.components.at(-1);
         fileItem.element.append(name);
 
         fileItem.element.onclick = () => {
             if (fileItem.type === "directory") {
-                if (openedDirectory.has(fileItem.path)) {
+                if (openedDirectory.has(fileItem.path.toString())) {
                     closeDirectory(fileItem.path);
                 } else {
                     openDirectory(fileItem.path);
@@ -171,12 +237,14 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         }
     };
 
-    const openDirectory = async (path: string, render = true) => {
-        openedDirectory.add(path);
-        const indexOfDirectory = flatFileList.findIndex((i) => i.path === path);
+    const openDirectory = async (path: Path, render = true) => {
+        openedDirectory.add(path.toString());
+        const indexOfDirectory = flatFileList.findIndex((fileItem) =>
+            fileItem.path.equals(path),
+        );
 
         let contentRaw: RawFileItem[];
-        const directoryRead = opts.readDirectory(path);
+        const directoryRead = opts.readDirectory(path.toString());
         if (directoryRead instanceof Promise) {
             contentRaw = await directoryRead;
         } else {
@@ -197,7 +265,7 @@ export function createFileTree(opts: CreateFileTreeOpts) {
 
         for (let i = 0; i < content.length; i++) {
             const item = content[i];
-            const itemPath = path + "/" + item.name;
+            const itemPath = path.createChildPath(item.name);
 
             flatFileList.splice(indexOfDirectory + 1, 0, {
                 type: item.isDirectory ? "directory" : "file",
@@ -205,7 +273,7 @@ export function createFileTree(opts: CreateFileTreeOpts) {
             });
 
             if (item.isDirectory) {
-                if (openedDirectory.has(itemPath)) {
+                if (openedDirectory.has(itemPath.toString())) {
                     await openDirectory(itemPath, false);
                 }
             }
@@ -216,21 +284,23 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         }
     };
 
-    const closeDirectory = (path: string, remove = false) => {
-        openedDirectory.delete(path);
+    const closeDirectory = (path: Path, removeSelf = false) => {
+        openedDirectory.delete(path.toString());
 
-        const pathComponents = path.split("/");
-        const removed = filterInPlace(flatFileList, (item) => {
-            const itemPathComponents = item.path.split("/");
-            if (itemPathComponents.length <= pathComponents.length && !remove) {
-                return true;
+        if(removeSelf) {
+            // close all opened sub directory
+            for(const d of openedDirectory) {
+                if(path.isParentOf(createPath(d))) {
+                    openedDirectory.delete(d);
+                }
             }
+        }
 
-            for (let i = 0; i < pathComponents.length; i++) {
-                if (itemPathComponents[i] !== pathComponents[i]) return true;
-            }
-            return false;
-        });
+        const predicate = removeSelf
+            ? (item: FileItem) => !item.path.isChildOf(path) && !item.path.equals(path)
+            : (item: FileItem) => !item.path.isChildOf(path);
+
+        const removed = filterInPlace(flatFileList, predicate);
         removed.forEach((i) => i.element?.remove());
         renderList();
     };
@@ -239,9 +309,10 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         
     };
 
-    const removeItem = (path: string) => closeDirectory(path, true);
+    const removeItem = (pathStr: string) =>
+        closeDirectory(createPath(pathStr), true);
 
-    openDirectory("");
+    openDirectory(createPath(""));
 
     return {
         container,

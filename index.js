@@ -22,6 +22,16 @@ function fakeDirectoryContent() {
     return new Array(itemsCount).fill(null).map(randomFileItem);
 }
 
+function copy(text) {
+    var input = document.createElement("input");
+    input.setAttribute("value", text);
+    document.body.appendChild(input);
+    input.select();
+    var result = document.execCommand("copy");
+    document.body.removeChild(input);
+    return result;
+}
+
 const cache = {};
 const iconCache = {};
 
@@ -56,12 +66,13 @@ const fileTree = createFileTree({
     actionSuffix: (fileItem) => {
         const div = document.createElement("div");
         div.innerText = "···";
-        div.onclick = e => {
+        div.onclick = (e) => {
             e.stopPropagation();
-            console.log(fileItem)
-        }
+            console.log(fileItem);
+        };
         return div;
     },
+    onSelect: ({ path }) => copy(path.toString()),
 });
 
 document.body.append(fileTree.container);
@@ -82,4 +93,4 @@ remove.onclick = () => {
     input.value = "";
 };
 
-document.body.append(input, add, remove)
+document.body.append(input, add, remove);
