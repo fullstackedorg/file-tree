@@ -162,6 +162,10 @@ function createRenderer(opts: RenderOpts) {
     };
 
     const r = {
+        shouldBeDisplayed: (path: Path) => {
+            const sibling = flatList.find(fileItem => fileItem.path.hasSameParentAs(path));
+            return !!sibling;
+        },
         addPath: (path: Path) => {
             if (path.components.length === 1) {
                 return addRootPath(path);
@@ -247,20 +251,23 @@ type ClickEventInfo = {
     shiftKey: boolean;
 };
 
-function asyncifyReadDir(
-    fn: (pathStr: string) => RawFileItem[] | Promise<RawFileItem[]>,
-): (pathStr: string) => Promise<RawFileItem[]> {
-    return async (pathStr: string) => {
-        const returnedValue = fn(pathStr);
+function asyncify<T extends (...params: any[]) => ReturnType<T>>(
+    fn: T,
+) : (...params: Parameters<T>) => Promise<Awaited<ReturnType<T>>> {
+    const asynced = async (...params: Parameters<T>) => {
+        const returnedValue = fn(...params);
         if (returnedValue instanceof Promise) {
             return await returnedValue;
         }
         return returnedValue;
     };
+
+    return asynced as any
 }
 
 export function createFileTree(opts: CreateFileTreeOpts) {
-    const readDirectory = asyncifyReadDir(opts.readDirectory);
+    const readDirectory = asyncify(opts.readDirectory);
+    const isDirectory = asyncify(opts.isDirectory);
 
     const directoryIcons = {
         open: opts.directoryIcons?.open || defaultDirectoryIcon(true),
@@ -365,9 +372,14 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         r.refreshPath(path);
     };
 
-    const addItem = (pathStr: string) => {
-        // r.addPath()
-    };
+    const addItem = async (pathStr: string) => {
+        const tmpPath = createPath(pathStr, null);
+        if(!r.shouldBeDisplayed(tmpPath))
+            return;
+
+        const path = createPath(pathStr, await isDirectory(pathStr));
+        r.addPath(path);
+    }
 
     const removeItem = (pathStr: string) => {
         r.removePath(createPath(pathStr, null));

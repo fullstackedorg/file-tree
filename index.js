@@ -7,7 +7,7 @@ function randomIntFromInterval(min, max) {
     return Math.floor(Math.random() * (max - min + 1) + min);
 }
 
-function randomFileItem(_, i) {
+function randomFileItem() {
     const isFile = Math.random() >= 0.5;
     return {
         name: isFile
@@ -41,7 +41,7 @@ const directoryIconClose = document.createElement("div");
 directoryIconClose.innerText = "▶️";
 
 const fileTree = createFileTree({
-    readDirectory: async (path) => {
+    readDirectory: (path) => {
         let content = cache[path];
         if (!content) {
             content = fakeDirectoryContent();
@@ -49,6 +49,7 @@ const fileTree = createFileTree({
         }
         return content;
     },
+    isDirectory: (path) => randomFileItem().isDirectory,
     directoryIcons: {
         open: directoryIconOpen,
         close: directoryIconClose,
