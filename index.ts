@@ -163,8 +163,8 @@ function createRenderer(opts: RenderOpts) {
 
     const r = {
         shouldBeDisplayed: (path: Path) => {
-            if(path.components.length === 1) return true;
-            
+            if (path.components.length === 1) return true;
+
             const sibling = flatList.find((fileItem) =>
                 fileItem.path.hasSameParentAs(path),
             );
@@ -220,12 +220,15 @@ function createRenderer(opts: RenderOpts) {
                 return;
             }
 
-            if (flatList[indexOfFileItem].path.isDirectory) {
-                r.removeChildPath(path);
-            }
+            const childPathRemoved: Path[] = flatList[indexOfFileItem].path
+                .isDirectory
+                ? r.removeChildPath(path)
+                : [];
 
             flatList[indexOfFileItem].element.remove();
             flatList.splice(indexOfFileItem, 1);
+
+            return childPathRemoved;
         },
         removeChildPath: (path: Path) => {
             const removed = filterInPlace(
@@ -233,6 +236,7 @@ function createRenderer(opts: RenderOpts) {
                 (fileItem) => !fileItem.path.isChildOf(path),
             );
             removed.forEach((fileItem) => fileItem.element.remove());
+            return removed.map((item) => item.path);
         },
         addPaths: (paths: Path[]) => {
             paths.forEach(r.addPath);
@@ -403,7 +407,10 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     };
 
     const removeItem = (pathStr: string) => {
-        r.removePath(createPath(pathStr, null));
+        openedDirectory.delete(pathStr);
+        r.removePath(createPath(pathStr, null))
+            .filter((path) => path.isDirectory)
+            .forEach((path) => openedDirectory.delete(path.toString()));
     };
 
     readDirectory("").then((rootItems) => {
@@ -478,7 +485,7 @@ function createFileItemElement(path: Path, opts: RenderOpts) {
         element.onclick = (e) => opts.onClick(path, e);
     }
 
-    const suffix = opts.suffix(path)
+    const suffix = opts.suffix(path);
     if (suffix) {
         const action = document.createElement("div");
         action.classList.add("suffix");
