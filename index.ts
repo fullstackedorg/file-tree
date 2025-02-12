@@ -255,7 +255,7 @@ type RawFileItem = { name: string; isDirectory: boolean };
 
 type CreateFileTreeOpts = {
     readDirectory: (pathStr: string) => RawFileItem[] | Promise<RawFileItem[]>;
-    isDirectory: (pathStr: string) => boolean;
+    isDirectory: (pathStr: string) => boolean | Promise<boolean>;
     itemHeight?: number;
     indentWidth?: number;
     directoryIcons?: {
