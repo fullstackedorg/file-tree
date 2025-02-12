@@ -163,7 +163,9 @@ function createRenderer(opts: RenderOpts) {
 
     const r = {
         shouldBeDisplayed: (path: Path) => {
-            const sibling = flatList.find(fileItem => fileItem.path.hasSameParentAs(path));
+            const sibling = flatList.find((fileItem) =>
+                fileItem.path.hasSameParentAs(path),
+            );
             return !!sibling;
         },
         addPath: (path: Path) => {
@@ -180,12 +182,16 @@ function createRenderer(opts: RenderOpts) {
                 return;
             }
 
+            const parentFileItem = flatList[indexOfDirectParent];
+
             const fileItem = createFileItem(path, opts);
 
             for (let i = indexOfDirectParent + 1; i < flatList.length; i++) {
                 if (
-                    !path.goesAfter(flatList[i].path) ||
-                    !path.hasSameParentAs(flatList[i].path)
+                    (!path.goesAfter(flatList[i].path) &&
+                        path.hasSameParentAs(flatList[i].path)) ||
+                    (!path.hasSameParentAs(flatList[i].path) &&
+                        !flatList[i].path.isChildOf(parentFileItem.path))
                 ) {
                     flatList[i].insertBefore(fileItem);
                     flatList.splice(i, 0, fileItem);
@@ -194,12 +200,14 @@ function createRenderer(opts: RenderOpts) {
             }
         },
         removePath: (path: Path) => {
-            const indexOfFileItem = flatList.findIndex(fileItem => fileItem.path.equals(path));
-            if(indexOfFileItem === -1) {
+            const indexOfFileItem = flatList.findIndex((fileItem) =>
+                fileItem.path.equals(path),
+            );
+            if (indexOfFileItem === -1) {
                 return;
             }
 
-            if(flatList[indexOfFileItem].path.isDirectory) {
+            if (flatList[indexOfFileItem].path.isDirectory) {
                 r.removeChildPath(path);
             }
 
@@ -253,7 +261,7 @@ type ClickEventInfo = {
 
 function asyncify<T extends (...params: any[]) => ReturnType<T>>(
     fn: T,
-) : (...params: Parameters<T>) => Promise<Awaited<ReturnType<T>>> {
+): (...params: Parameters<T>) => Promise<Awaited<ReturnType<T>>> {
     const asynced = async (...params: Parameters<T>) => {
         const returnedValue = fn(...params);
         if (returnedValue instanceof Promise) {
@@ -262,7 +270,7 @@ function asyncify<T extends (...params: any[]) => ReturnType<T>>(
         return returnedValue;
     };
 
-    return asynced as any
+    return asynced as any;
 }
 
 export function createFileTree(opts: CreateFileTreeOpts) {
@@ -374,12 +382,11 @@ export function createFileTree(opts: CreateFileTreeOpts) {
 
     const addItem = async (pathStr: string) => {
         const tmpPath = createPath(pathStr, null);
-        if(!r.shouldBeDisplayed(tmpPath))
-            return;
+        if (!r.shouldBeDisplayed(tmpPath)) return;
 
         const path = createPath(pathStr, await isDirectory(pathStr));
         r.addPath(path);
-    }
+    };
 
     const removeItem = (pathStr: string) => {
         r.removePath(createPath(pathStr, null));
