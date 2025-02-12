@@ -48,22 +48,25 @@ function isPathDirectParentOfPath(parent: Path, child: Path) {
 }
 
 function sortPaths(path1: Path, path2: Path) {
-    if(path1.hasSameParentAs(path2)) {
-        if(path1.isDirectory && !path2.isDirectory) {
-            return -1
-        } else if(!path1.isDirectory && path2.isDirectory) {
-            return 1
+    if (path1.hasSameParentAs(path2)) {
+        if (path1.isDirectory && !path2.isDirectory) {
+            return -1;
+        } else if (!path1.isDirectory && path2.isDirectory) {
+            return 1;
         }
     }
 
-    return path1.toString() < path2.toString() ? -1 : 1
+    return path1.toString() < path2.toString() ? -1 : 1;
 }
 
 function createPath(pathStr: string, isDirectory: boolean): Path {
     return createPathWithComponents(pathStr.split("/"), isDirectory);
 }
 
-function createPathWithComponents(components: string[], isDirectory: boolean): Path {
+function createPathWithComponents(
+    components: string[],
+    isDirectory: boolean,
+): Path {
     const p: Path = {
         isDirectory,
         components,
@@ -84,18 +87,25 @@ function createPathWithComponents(components: string[], isDirectory: boolean): P
 
 type FileItem = {
     path: Path;
-    element: HTMLElement;
+    element: HTMLDivElement;
+    refresh: (fileItem: FileItem) => void;
     insertAfter: (fileItem: FileItem) => void;
 };
 
-
-
 function createFileItem(path: Path): FileItem {
+    let element = createFileItemElement(path, null);
     const f: FileItem = {
         path,
-        element: document.createElement("div"),
+        get element() {
+            return element;
+        },
+        refresh: () => {
+            const updatedElement = createFileItemElement(path, null);
+            element.replaceWith(updatedElement);
+            element = updatedElement;
+        },
         insertAfter: (fileItem) =>
-            f.element?.insertAdjacentElement("afterend", fileItem.element),
+            element.insertAdjacentElement("afterend", fileItem.element),
     };
     return f;
 }
@@ -181,61 +191,6 @@ export function createFileTree(opts: CreateFileTreeOpts) {
             : opts.directoryIcons?.close?.cloneNode(true) || ">";
         iconContainer.append(icon);
         return iconContainer;
-    };
-
-    const createItemElements = (fileItem: FileItem) => {
-        const depth = fileItem.path.components.length - 2;
-        fileItem.element = document.createElement("div");
-        fileItem.element.classList.add("file-item");
-
-        fileItem.element.style.height = itemHeight + "px";
-
-        fileItem.element.append(
-            ...new Array(depth).fill(null).map(() => {
-                const indentSpace = document.createElement("div");
-                indentSpace.style.width = indentWidth + "px";
-                indentSpace.style.minWidth = indentWidth + "px";
-                indentSpace.classList.add("indent");
-                const line = document.createElement("div");
-                indentSpace.append(line);
-                return indentSpace;
-            }),
-        );
-
-        if (fileItem.type === "file" && opts.iconPrefix) {
-            const iconContainer = document.createElement("div");
-            iconContainer.classList.add("icon");
-            const icon = opts.iconPrefix(fileItem);
-            iconContainer.append(icon);
-            fileItem.element.append(iconContainer);
-        } else if (fileItem.type === "directory") {
-            fileItem.element.append(renderDirectoryIcon(fileItem));
-        }
-
-        const name = document.createElement("div");
-        name.innerText = fileItem.path.components.at(-1);
-        fileItem.element.append(name);
-
-        fileItem.element.onclick = () => {
-            if (fileItem.type === "directory") {
-                if (openedDirectory.has(fileItem.path.toString())) {
-                    closeDirectory(fileItem.path);
-                } else {
-                    openDirectory(fileItem.path);
-                }
-                fileItem.element
-                    .querySelector(".icon")
-                    .replaceWith(renderDirectoryIcon(fileItem));
-            }
-            setActive(fileItem.path);
-        };
-
-        if (opts.actionSuffix) {
-            const action = document.createElement("div");
-            action.classList.add("action");
-            action.append(opts.actionSuffix(fileItem));
-            fileItem.element.append(action);
-        }
     };
 
     const renderList = () => {
@@ -360,4 +315,68 @@ function filterInPlace<T>(
     a.length = j;
 
     return r;
+}
+
+type FileItemElementOpts = {
+    itemHeight: number;
+    indentWidth: number;
+    iconPrefix?: HTMLElement;
+    onClick?: (path: Path) => void;
+};
+
+function createFileItemElement(path: Path, opts: FileItemElementOpts) {
+    const depth = path.components.length - 2;
+    const element = document.createElement("div");
+    element.classList.add("file-item");
+
+    element.style.height = opts.itemHeight + "px";
+
+    element.append(
+        ...new Array(depth).fill(null).map(() => {
+            const indentSpace = document.createElement("div");
+            indentSpace.style.width = opts.indentWidth + "px";
+            indentSpace.style.minWidth = opts.indentWidth + "px";
+            indentSpace.classList.add("indent");
+            const line = document.createElement("div");
+            indentSpace.append(line);
+            return indentSpace;
+        }),
+    );
+
+    if (!path.isDirectory && opts.iconPrefix) {
+        const iconContainer = document.createElement("div");
+        iconContainer.classList.add("icon");
+        const icon = opts.iconPrefix(fileItem);
+        iconContainer.append(icon);
+        fileItem.element.append(iconContainer);
+    } else if (fileItem.type === "directory") {
+        fileItem.element.append(renderDirectoryIcon(fileItem));
+    }
+
+    const name = document.createElement("div");
+    name.innerText = fileItem.path.components.at(-1);
+    fileItem.element.append(name);
+
+    fileItem.element.onclick = () => {
+        if (fileItem.type === "directory") {
+            if (openedDirectory.has(fileItem.path.toString())) {
+                closeDirectory(fileItem.path);
+            } else {
+                openDirectory(fileItem.path);
+            }
+            fileItem.element
+                .querySelector(".icon")
+                .replaceWith(renderDirectoryIcon(fileItem));
+        }
+        setActive(fileItem.path);
+    };
+
+    if (opts.actionSuffix) {
+        const action = document.createElement("div");
+        action.classList.add("action");
+        action.append(opts.actionSuffix(fileItem));
+        fileItem.element.append(action);
+    }
+
+    return element;
 }
