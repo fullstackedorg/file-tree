@@ -17,11 +17,6 @@
     position: relative;
 }
 
-.file-tree > .scrollable > .file-items > .file-item > .action {
-    opacity: 0;
-    pointer-events: none;
-}
-
 .file-tree > .scrollable > .file-items > .file-item {
     display: flex;
     align-items: center;
@@ -41,22 +36,4 @@
     width: 50%;
     border-right: 1px solid white;
     opacity: 0.2;
-}
-
-.file-tree .active {
-    position: absolute;
-    background-color: rgba(0, 0, 250, 0.2);
-    border: 1px solid blue;
-    width: 100%;
-    pointer-events: none;
-}
-
-.file-tree .active > .action {
-    height: 100%;
-    position: absolute;
-    display: flex;
-    align-items: center;
-    right: 0;
-    top: 0;
-    pointer-events: all;
 }

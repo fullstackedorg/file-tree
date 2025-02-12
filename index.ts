@@ -119,9 +119,9 @@ type RenderOpts = {
     container: HTMLElement;
     itemHeight: number;
     indentWidth: number;
-    iconPrefix: (path: Path) => HTMLElement;
+    prefix: (path: Path) => HTMLElement;
+    suffix: (path: Path) => HTMLElement;
     onClick: (path: Path, e: MouseEvent) => void;
-    actionSuffix?: (path: Path) => HTMLElement;
 };
 
 function createRenderer(opts: RenderOpts) {
@@ -163,17 +163,21 @@ function createRenderer(opts: RenderOpts) {
 
     const r = {
         shouldBeDisplayed: (path: Path) => {
+            if(path.components.length === 1) return true;
+            
             const sibling = flatList.find((fileItem) =>
                 fileItem.path.hasSameParentAs(path),
             );
             return !!sibling;
         },
         addPath: (path: Path) => {
-            const exists = flatList.find(fileItem => fileItem.path.equals(path));
-            if(exists) {
+            const exists = flatList.find((fileItem) =>
+                fileItem.path.equals(path),
+            );
+            if (exists) {
                 return;
             }
-            
+
             if (path.components.length === 1) {
                 return addRootPath(path);
             }
@@ -206,7 +210,7 @@ function createRenderer(opts: RenderOpts) {
 
             // reached end
             opts.container.append(fileItem.element);
-            flatList.push(fileItem)
+            flatList.push(fileItem);
         },
         removePath: (path: Path) => {
             const indexOfFileItem = flatList.findIndex((fileItem) =>
@@ -252,8 +256,8 @@ type CreateFileTreeOpts = {
         open: HTMLElement;
         close: HTMLElement;
     };
-    actionSuffix?: (pathStr: string) => HTMLElement;
-    iconPrefix?: (pathStr: string) => HTMLElement;
+    suffix?: (pathStr: string) => HTMLElement;
+    prefix?: (pathStr: string) => HTMLElement;
     onSelect?: (pathStr: string) => void;
 };
 
@@ -329,11 +333,12 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         container: fileItems,
         itemHeight: opts.itemHeight || 25,
         indentWidth: opts.indentWidth || 20,
-        iconPrefix: (path) => {
+        prefix: (path) => {
             if (path.isDirectory) return createDirectoryIcon(path);
-            else if (opts.iconPrefix) return opts.iconPrefix(path.toString());
+            else if (opts.prefix) return opts.prefix(path.toString());
             return null;
         },
+        suffix: (path) => opts.suffix(path.toString()),
         onClick: (path, e) => {
             if (path.isDirectory) {
                 toggleDirectory(path);
@@ -457,11 +462,11 @@ function createFileItemElement(path: Path, opts: RenderOpts) {
         }),
     );
 
-    const icon = opts.iconPrefix(path);
-    if (icon) {
+    const prefix = opts.prefix(path);
+    if (prefix) {
         const iconContainer = document.createElement("div");
-        iconContainer.classList.add("icon");
-        iconContainer.append(icon);
+        iconContainer.classList.add("prefix");
+        iconContainer.append(prefix);
         element.append(iconContainer);
     }
 
@@ -473,10 +478,11 @@ function createFileItemElement(path: Path, opts: RenderOpts) {
         element.onclick = (e) => opts.onClick(path, e);
     }
 
-    if (opts.actionSuffix) {
+    const suffix = opts.suffix(path)
+    if (suffix) {
         const action = document.createElement("div");
-        action.classList.add("action");
-        action.append(opts.actionSuffix(path));
+        action.classList.add("suffix");
+        action.append(suffix);
         element.append(action);
     }
 

@@ -54,7 +54,7 @@ const fileTree = createFileTree({
         open: directoryIconOpen,
         close: directoryIconClose,
     },
-    iconPrefix: (path) => {
+    prefix: (path) => {
         let imgSrc = iconCache[path];
         if (!imgSrc) {
             imgSrc = faker.image.avatar();
@@ -64,7 +64,7 @@ const fileTree = createFileTree({
         img.src = imgSrc;
         return img;
     },
-    actionSuffix: (path) => {
+    suffix: (path) => {
         const div = document.createElement("div");
         div.innerText = "···";
         return div;
