@@ -169,6 +169,11 @@ function createRenderer(opts: RenderOpts) {
             return !!sibling;
         },
         addPath: (path: Path) => {
+            const exists = flatList.find(fileItem => fileItem.path.equals(path));
+            if(exists) {
+                return;
+            }
+            
             if (path.components.length === 1) {
                 return addRootPath(path);
             }
@@ -198,6 +203,10 @@ function createRenderer(opts: RenderOpts) {
                     return;
                 }
             }
+
+            // reached end
+            opts.container.append(fileItem.element);
+            flatList.push(fileItem)
         },
         removePath: (path: Path) => {
             const indexOfFileItem = flatList.findIndex((fileItem) =>
