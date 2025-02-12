@@ -26,6 +26,9 @@
 .file-tree > .scrollable > .file-items > .file-item:hover {
     background-color: gray;
 }
+.file-tree > .scrollable > .file-items > .file-item.active {
+    background-color: darkblue;
+}
 
 .file-tree > .scrollable > .file-items > .file-item .indent {
     height: 100%;

@@ -119,8 +119,10 @@ type RenderOpts = {
     container: HTMLElement;
     itemHeight: number;
     indentWidth: number;
+    isActive: (path: Path) => boolean;
     prefix: (path: Path) => HTMLElement;
     suffix: (path: Path) => HTMLElement;
+    classes: (path: Path) => string[];
     onClick: (path: Path, e: MouseEvent) => void;
 };
 
@@ -217,7 +219,7 @@ function createRenderer(opts: RenderOpts) {
                 fileItem.path.equals(path),
             );
             if (indexOfFileItem === -1) {
-                return;
+                return [];
             }
 
             const childPathRemoved: Path[] = flatList[indexOfFileItem].path
@@ -262,6 +264,7 @@ type CreateFileTreeOpts = {
     };
     suffix?: (pathStr: string) => HTMLElement;
     prefix?: (pathStr: string) => HTMLElement;
+    classes?: (pathStr: string) => string[];
     onSelect?: (pathStr: string) => void;
 };
 
@@ -294,6 +297,22 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     const readDirectory = asyncify(opts.readDirectory);
     const isDirectory = asyncify(opts.isDirectory);
 
+    const openedDirectory = new Set<string>();
+    const activePaths = new Set<string>();
+
+    window.addEventListener("click", () => removeActive());
+
+    const container = document.createElement("div");
+    container.classList.add("file-tree");
+
+    const scrollable = document.createElement("div");
+    scrollable.classList.add("scrollable");
+    container.append(scrollable);
+
+    const fileItems = document.createElement("div");
+    fileItems.classList.add("file-items");
+    scrollable.append(fileItems);
+
     const directoryIcons = {
         open: opts.directoryIcons?.open || defaultDirectoryIcon(true),
         close: opts.directoryIcons?.close || defaultDirectoryIcon(false),
@@ -315,36 +334,26 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     };
 
     const toggleActive = (path: Path, e: ClickEventInfo) => {
-        if (activePaths.has(path.toString())) {
-            removeActive(path, e);
+        if (e.metaKey && activePaths.has(path.toString())) {
+            removeActive(path);
         } else {
-            setActive(path, e);
+            addActive(path, e);
         }
     };
-
-    const container = document.createElement("div");
-    container.classList.add("file-tree");
-
-    const scrollable = document.createElement("div");
-    scrollable.classList.add("scrollable");
-    container.append(scrollable);
-
-    const fileItems = document.createElement("div");
-    fileItems.classList.add("file-items");
-    scrollable.append(fileItems);
 
     const renderOpts: RenderOpts = {
         container: fileItems,
         itemHeight: opts.itemHeight || 25,
         indentWidth: opts.indentWidth || 20,
+        isActive: (path) => activePaths.has(path.toString()),
         prefix: (path) => {
             if (path.isDirectory) return createDirectoryIcon(path);
-            else if (opts.prefix) return opts.prefix(path.toString());
-            return null;
+            return opts.prefix?.(path.toString());
         },
-        suffix: (path) => opts.suffix(path.toString()),
+        suffix: (path) => opts.suffix?.(path.toString()),
+        classes: (path) => opts.classes?.(path.toString()),
         onClick: (path, e) => {
-            if (path.isDirectory) {
+            if (path.isDirectory && !e.metaKey) {
                 toggleDirectory(path);
             }
             toggleActive(path, {
@@ -356,14 +365,26 @@ export function createFileTree(opts: CreateFileTreeOpts) {
 
     const r = createRenderer(renderOpts);
 
-    const openedDirectory = new Set<string>();
-    const activePaths = new Set<string>();
+    const addActive = (path: Path, e: ClickEventInfo) => {
+        if (!e.metaKey) {
+            removeActive();
+        }
 
-    const setActive = (path: Path, e: ClickEventInfo) => {
+        activePaths.add(path.toString());
+        r.refreshPath(path);
         opts.onSelect?.(path.toString());
     };
 
-    const removeActive = (path: Path, e: ClickEventInfo) => {};
+    const removeActive = (path?: Path) => {
+        if (path) {
+            activePaths.delete(path.toString());
+            r.refreshPath(path);
+        } else {
+            const copy = Array.from(activePaths);
+            activePaths.clear();
+            copy.forEach((p) => r.refreshPath(createPath(p, null)));
+        }
+    };
 
     const openDirectory = async (path: Path, render = true) => {
         openedDirectory.add(path.toString());
@@ -408,10 +429,18 @@ export function createFileTree(opts: CreateFileTreeOpts) {
 
     const removeItem = (pathStr: string) => {
         openedDirectory.delete(pathStr);
-        r.removePath(createPath(pathStr, null))
-            .filter((path) => path.isDirectory)
-            .forEach((path) => openedDirectory.delete(path.toString()));
+        if (activePaths.has(pathStr)) {
+            removeActive(createPath(pathStr, null));
+        }
+        r.removePath(createPath(pathStr, null)).forEach((p) => {
+            removeActive(p);
+            openedDirectory.delete(p.toString());
+        });
     };
+
+    const refreshItem = (pathStr: string) => {
+        r.refreshPath(createPath(pathStr, null));
+    }
 
     readDirectory("").then((rootItems) => {
         const rootPaths = rootItems.map(({ name, isDirectory }) =>
@@ -424,6 +453,7 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         container,
         addItem,
         removeItem,
+        refreshItem,
     };
 }
 
@@ -455,6 +485,15 @@ function createFileItemElement(path: Path, opts: RenderOpts) {
     const element = document.createElement("div");
     element.classList.add("file-item");
 
+    if (opts.isActive(path)) {
+        element.classList.add("active");
+    }
+
+    const customClasses = opts.classes(path);
+    if (customClasses) {
+        element.classList.add(...customClasses);
+    }
+
     element.style.height = opts.itemHeight + "px";
 
     element.append(
@@ -482,7 +521,10 @@ function createFileItemElement(path: Path, opts: RenderOpts) {
     element.append(name);
 
     if (opts.onClick) {
-        element.onclick = (e) => opts.onClick(path, e);
+        element.onclick = (e) => {
+            e.stopPropagation();
+            opts.onClick(path, e);
+        };
     }
 
     const suffix = opts.suffix(path);

@@ -34,6 +34,7 @@ function copy(text) {
 
 const cache = {};
 const iconCache = {};
+const colorCache = new Set();
 
 const directoryIconOpen = document.createElement("div");
 directoryIconOpen.innerText = "🔽";
@@ -69,6 +70,10 @@ const fileTree = createFileTree({
         div.innerText = "···";
         return div;
     },
+    classes: (path) => {
+        if(colorCache.has(path)) return ["red"]
+        return []
+    },
     onSelect: (path) => copy(path),
 });
 
@@ -89,5 +94,17 @@ remove.onclick = () => {
     fileTree.removeItem(v);
     input.value = "";
 };
+const update = document.createElement("button");
+update.innerText = "Update";
+update.onclick = () => {
+    const v = input.value;
+    if(colorCache.has(v)) {
+        colorCache.delete(v)
+    } else {
+        colorCache.add(v)
+    }
+    fileTree.refreshItem(v)
+    input.value = "";
+};
 
-document.body.append(input, add, remove);
+document.body.append(input, add, remove, update);
