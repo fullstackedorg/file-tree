@@ -53,26 +53,22 @@ const fileTree = createFileTree({
         open: directoryIconOpen,
         close: directoryIconClose,
     },
-    iconPrefix: (fileItem) => {
-        let imgSrc = iconCache[fileItem.path];
+    iconPrefix: (path) => {
+        let imgSrc = iconCache[path];
         if (!imgSrc) {
             imgSrc = faker.image.avatar();
-            iconCache[fileItem.path] = imgSrc;
+            iconCache[path] = imgSrc;
         }
         const img = document.createElement("img");
         img.src = imgSrc;
         return img;
     },
-    actionSuffix: (fileItem) => {
+    actionSuffix: (path) => {
         const div = document.createElement("div");
         div.innerText = "···";
-        div.onclick = (e) => {
-            e.stopPropagation();
-            console.log(fileItem);
-        };
         return div;
     },
-    onSelect: ({ path }) => copy(path.toString()),
+    onSelect: (path) => copy(path),
 });
 
 document.body.append(fileTree.container);

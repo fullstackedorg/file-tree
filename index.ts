@@ -56,7 +56,9 @@ function sortPaths(path1: Path, path2: Path) {
         }
     }
 
-    return path1.toString() < path2.toString() ? -1 : 1;
+    return path1.toString().toLowerCase() < path2.toString().toLowerCase()
+        ? -1
+        : 1;
 }
 
 function createPath(pathStr: string, isDirectory: boolean): Path {
@@ -88,49 +90,208 @@ function createPathWithComponents(
 type FileItem = {
     path: Path;
     element: HTMLDivElement;
-    refresh: (fileItem: FileItem) => void;
+    refresh: () => void;
+    insertBefore: (fileItem: FileItem) => void;
     insertAfter: (fileItem: FileItem) => void;
 };
 
-function createFileItem(path: Path): FileItem {
-    let element = createFileItemElement(path, null);
+function createFileItem(path: Path, opts: RenderOpts): FileItem {
+    let element = createFileItemElement(path, opts);
     const f: FileItem = {
         path,
         get element() {
             return element;
         },
         refresh: () => {
-            const updatedElement = createFileItemElement(path, null);
+            const updatedElement = createFileItemElement(path, opts);
             element.replaceWith(updatedElement);
             element = updatedElement;
         },
+        insertBefore: (fileItem) =>
+            element.insertAdjacentElement("beforebegin", fileItem.element),
         insertAfter: (fileItem) =>
             element.insertAdjacentElement("afterend", fileItem.element),
     };
     return f;
 }
 
+type RenderOpts = {
+    container: HTMLElement;
+    itemHeight: number;
+    indentWidth: number;
+    iconPrefix: (path: Path) => HTMLElement;
+    onClick: (path: Path, e: MouseEvent) => void;
+    actionSuffix?: (path: Path) => HTMLElement;
+};
+
+function createRenderer(opts: RenderOpts) {
+    const flatList: FileItem[] = [];
+
+    const addRootPath = (path: Path) => {
+        const fileItem = createFileItem(path, opts);
+
+        // first element
+        if (flatList.length === 0) {
+            opts.container.append(fileItem.element);
+            flatList.push(fileItem);
+            return;
+        }
+        // at start
+        else if (flatList.at(0).path.goesAfter(path)) {
+            opts.container.prepend(fileItem.element);
+            flatList.unshift(fileItem);
+            return;
+        }
+        // at end
+        else if (path.goesAfter(flatList.at(-1).path)) {
+            opts.container.append(fileItem.element);
+            flatList.push(fileItem);
+            return;
+        }
+
+        // in the middle
+        for (let i = 0; i < flatList.length; i++) {
+            if (flatList[i].path.components.length !== 1) continue;
+
+            if (!path.goesAfter(flatList[i].path)) {
+                flatList[i].insertBefore(fileItem);
+                flatList.splice(i, 0, fileItem);
+                return;
+            }
+        }
+    };
+
+    const r = {
+        addPath: (path: Path) => {
+            if (path.components.length === 1) {
+                return addRootPath(path);
+            }
+
+            const indexOfDirectParent = flatList.findIndex((fileItem) =>
+                fileItem.path.isDirectParentOf(path),
+            );
+
+            // parent isn't open so dont bother going any further
+            if (indexOfDirectParent === -1) {
+                return;
+            }
+
+            const fileItem = createFileItem(path, opts);
+
+            for (let i = indexOfDirectParent + 1; i < flatList.length; i++) {
+                if (
+                    !path.goesAfter(flatList[i].path) ||
+                    !path.hasSameParentAs(flatList[i].path)
+                ) {
+                    flatList[i].insertBefore(fileItem);
+                    flatList.splice(i, 0, fileItem);
+                    return;
+                }
+            }
+        },
+        removePath: (path: Path) => {
+            const indexOfFileItem = flatList.findIndex(fileItem => fileItem.path.equals(path));
+            if(indexOfFileItem === -1) {
+                return;
+            }
+
+            if(flatList[indexOfFileItem].path.isDirectory) {
+                r.removeChildPath(path);
+            }
+
+            flatList[indexOfFileItem].element.remove();
+            flatList.splice(indexOfFileItem, 1);
+        },
+        removeChildPath: (path: Path) => {
+            const removed = filterInPlace(
+                flatList,
+                (fileItem) => !fileItem.path.isChildOf(path),
+            );
+            removed.forEach((fileItem) => fileItem.element.remove());
+        },
+        addPaths: (paths: Path[]) => {
+            paths.forEach(r.addPath);
+        },
+        refreshPath: (path: Path) => {
+            const fileItem = flatList.find((f) => f.path.equals(path));
+            fileItem?.refresh();
+        },
+    };
+    return r;
+}
+
 type RawFileItem = { name: string; isDirectory: boolean };
 
 type CreateFileTreeOpts = {
-    readDirectory: (path: string) => RawFileItem[] | Promise<RawFileItem[]>;
+    readDirectory: (pathStr: string) => RawFileItem[] | Promise<RawFileItem[]>;
+    isDirectory: (pathStr: string) => boolean;
     itemHeight?: number;
     indentWidth?: number;
     directoryIcons?: {
         open: HTMLElement;
         close: HTMLElement;
     };
-    actionSuffix?: (fileItem: FileItem) => HTMLElement;
-    iconPrefix?: (fileItem: FileItem) => HTMLElement;
-    onSelect?: (fileItem: FileItem) => void;
+    actionSuffix?: (pathStr: string) => HTMLElement;
+    iconPrefix?: (pathStr: string) => HTMLElement;
+    onSelect?: (pathStr: string) => void;
 };
 
+function defaultDirectoryIcon(open: boolean) {
+    const div = document.createElement("div");
+    div.innerText = open ? "V" : ">";
+    return div;
+}
+
+type ClickEventInfo = {
+    metaKey: boolean;
+    shiftKey: boolean;
+};
+
+function asyncifyReadDir(
+    fn: (pathStr: string) => RawFileItem[] | Promise<RawFileItem[]>,
+): (pathStr: string) => Promise<RawFileItem[]> {
+    return async (pathStr: string) => {
+        const returnedValue = fn(pathStr);
+        if (returnedValue instanceof Promise) {
+            return await returnedValue;
+        }
+        return returnedValue;
+    };
+}
+
 export function createFileTree(opts: CreateFileTreeOpts) {
+    const readDirectory = asyncifyReadDir(opts.readDirectory);
+
+    const directoryIcons = {
+        open: opts.directoryIcons?.open || defaultDirectoryIcon(true),
+        close: opts.directoryIcons?.close || defaultDirectoryIcon(false),
+    };
+
+    const createDirectoryIcon = (path: Path) => {
+        const icon = openedDirectory.has(path.toString())
+            ? directoryIcons.open
+            : directoryIcons.close;
+        return icon.cloneNode(true) as HTMLElement;
+    };
+
+    const toggleDirectory = (path: Path) => {
+        if (openedDirectory.has(path.toString())) {
+            closeDirectory(path);
+        } else {
+            openDirectory(path);
+        }
+    };
+
+    const toggleActive = (path: Path, e: ClickEventInfo) => {
+        if (activePaths.has(path.toString())) {
+            removeActive(path, e);
+        } else {
+            setActive(path, e);
+        }
+    };
+
     const container = document.createElement("div");
     container.classList.add("file-tree");
-
-    const itemHeight = opts.itemHeight || 25;
-    const indentWidth = opts.indentWidth || 20;
 
     const scrollable = document.createElement("div");
     scrollable.classList.add("scrollable");
@@ -140,152 +301,84 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     fileItems.classList.add("file-items");
     scrollable.append(fileItems);
 
-    const flatFileList: FileItem[] = [];
+    const renderOpts: RenderOpts = {
+        container: fileItems,
+        itemHeight: opts.itemHeight || 25,
+        indentWidth: opts.indentWidth || 20,
+        iconPrefix: (path) => {
+            if (path.isDirectory) return createDirectoryIcon(path);
+            else if (opts.iconPrefix) return opts.iconPrefix(path.toString());
+            return null;
+        },
+        onClick: (path, e) => {
+            if (path.isDirectory) {
+                toggleDirectory(path);
+            }
+            toggleActive(path, {
+                metaKey: e.metaKey || e.ctrlKey,
+                shiftKey: e.shiftKey,
+            });
+        },
+    };
+
+    const r = createRenderer(renderOpts);
+
     const openedDirectory = new Set<string>();
+    const activePaths = new Set<string>();
 
-    let lastActive: {
-        element: HTMLElement;
-        action?: HTMLElement;
-        path: Path;
-    };
-    const setActive = (path?: Path) => {
-        path = path || lastActive.path;
-        const indexOf = flatFileList.findIndex((i) => i.path.equals(path));
-
-        const element = lastActive?.element || document.createElement("div");
-        element.classList.add("active");
-        element.style.top = itemHeight * indexOf + "px";
-        element.style.height = itemHeight + "px";
-
-        let action: HTMLElement;
-        if (opts.actionSuffix) {
-            action = document.createElement("div");
-            action.classList.add("action");
-            action.append(opts.actionSuffix(flatFileList.at(indexOf)));
-
-            if (lastActive?.action) {
-                lastActive.action.replaceWith(action);
-            } else {
-                element.append(action);
-            }
-        }
-
-        if (!lastActive?.element) {
-            fileItems.append(element);
-        }
-
-        lastActive = {
-            element,
-            action,
-            path,
-        };
-
-        opts.onSelect?.(flatFileList[indexOf]);
+    const setActive = (path: Path, e: ClickEventInfo) => {
+        opts.onSelect?.(path.toString());
     };
 
-    const renderDirectoryIcon = (fileItem: FileItemDirectory) => {
-        const iconContainer = document.createElement("div");
-        iconContainer.classList.add("icon");
-        const icon = openedDirectory.has(fileItem.path.toString())
-            ? opts.directoryIcons?.open?.cloneNode(true) || "V"
-            : opts.directoryIcons?.close?.cloneNode(true) || ">";
-        iconContainer.append(icon);
-        return iconContainer;
-    };
-
-    const renderList = () => {
-        let lastSeenElement: HTMLElement = null;
-        for (let i = 0; i < flatFileList.length; i++) {
-            const fileItem = flatFileList[i];
-
-            if (!fileItem.element) {
-                createItemElements(fileItem);
-                if (lastSeenElement) {
-                    lastSeenElement.insertAdjacentElement(
-                        "afterend",
-                        fileItem.element,
-                    );
-                } else {
-                    fileItems.append(fileItem.element);
-                }
-            }
-
-            lastSeenElement = fileItem.element;
-        }
-    };
+    const removeActive = (path: Path, e: ClickEventInfo) => {};
 
     const openDirectory = async (path: Path, render = true) => {
         openedDirectory.add(path.toString());
-        const indexOfDirectory = flatFileList.findIndex((fileItem) =>
-            fileItem.path.equals(path),
+
+        const contentRaw = await readDirectory(path.toString());
+
+        const childPaths: Path[] = contentRaw.map(({ isDirectory, name }) =>
+            path.createChildPath(name, isDirectory),
         );
 
-        let contentRaw: RawFileItem[];
-        const directoryRead = opts.readDirectory(path.toString());
-        if (directoryRead instanceof Promise) {
-            contentRaw = await directoryRead;
-        } else {
-            contentRaw = directoryRead;
-        }
+        const openSubDirectoryPromises = childPaths
+            .filter((childPath) => openedDirectory.has(childPath.toString()))
+            .map((childPath) => openDirectory(childPath, false));
 
-        const fileItems: FileItem[] = contentRaw.map(({ isDirectory, name }) =>
-            createFileItem(
-                isDirectory ? "directory" : "file",
-                path.createChildPath(name),
-            ),
-        );
+        const subDirectoryPaths = (
+            await Promise.all(openSubDirectoryPromises)
+        ).flat();
 
-        for (let i = 0; i < content.length; i++) {
-            const item = content[i];
-            const itemPath = path.createChildPath(item.name);
-
-            flatFileList.splice(indexOfDirectory + 1, 0, {
-                type: item.isDirectory ? "directory" : "file",
-                path: itemPath,
-            });
-
-            if (item.isDirectory) {
-                if (openedDirectory.has(itemPath.toString())) {
-                    await openDirectory(itemPath, false);
-                }
-            }
-        }
+        childPaths.push(...subDirectoryPaths);
 
         if (render) {
-            renderList();
+            r.addPaths(childPaths);
+            r.refreshPath(path);
+        } else {
+            return childPaths;
         }
     };
 
-    const closeDirectory = (path: Path, removeSelf = false) => {
+    const closeDirectory = (path: Path) => {
         openedDirectory.delete(path.toString());
-
-        if (removeSelf) {
-            // close all opened sub directory
-            for (const d of openedDirectory) {
-                if (path.isParentOf(createPath(d))) {
-                    openedDirectory.delete(d);
-                }
-            }
-        }
-
-        const predicate = removeSelf
-            ? (item: FileItem) =>
-                  !item.path.isChildOf(path) && !item.path.equals(path)
-            : (item: FileItem) => !item.path.isChildOf(path);
-
-        const removed = filterInPlace(flatFileList, predicate);
-        removed.forEach((i) => i.element?.remove());
-        renderList();
+        r.removeChildPath(path);
+        r.refreshPath(path);
     };
 
     const addItem = (pathStr: string) => {
-        const path = createPath(pathStr);
+        // r.addPath()
     };
 
-    const removeItem = (pathStr: string) =>
-        closeDirectory(createPath(pathStr), true);
+    const removeItem = (pathStr: string) => {
+        r.removePath(createPath(pathStr, null));
+    };
 
-    openDirectory(createPath(""));
+    readDirectory("").then((rootItems) => {
+        const rootPaths = rootItems.map(({ name, isDirectory }) =>
+            createPath(name, isDirectory),
+        );
+        r.addPaths(rootPaths);
+    });
 
     return {
         container,
@@ -317,15 +410,8 @@ function filterInPlace<T>(
     return r;
 }
 
-type FileItemElementOpts = {
-    itemHeight: number;
-    indentWidth: number;
-    iconPrefix?: HTMLElement;
-    onClick?: (path: Path) => void;
-};
-
-function createFileItemElement(path: Path, opts: FileItemElementOpts) {
-    const depth = path.components.length - 2;
+function createFileItemElement(path: Path, opts: RenderOpts) {
+    const depth = path.components.length - 1;
     const element = document.createElement("div");
     element.classList.add("file-item");
 
@@ -343,39 +429,27 @@ function createFileItemElement(path: Path, opts: FileItemElementOpts) {
         }),
     );
 
-    if (!path.isDirectory && opts.iconPrefix) {
+    const icon = opts.iconPrefix(path);
+    if (icon) {
         const iconContainer = document.createElement("div");
         iconContainer.classList.add("icon");
-        const icon = opts.iconPrefix(fileItem);
         iconContainer.append(icon);
-        fileItem.element.append(iconContainer);
-    } else if (fileItem.type === "directory") {
-        fileItem.element.append(renderDirectoryIcon(fileItem));
+        element.append(iconContainer);
     }
 
     const name = document.createElement("div");
-    name.innerText = fileItem.path.components.at(-1);
-    fileItem.element.append(name);
+    name.innerText = path.components.at(-1);
+    element.append(name);
 
-    fileItem.element.onclick = () => {
-        if (fileItem.type === "directory") {
-            if (openedDirectory.has(fileItem.path.toString())) {
-                closeDirectory(fileItem.path);
-            } else {
-                openDirectory(fileItem.path);
-            }
-            fileItem.element
-                .querySelector(".icon")
-                .replaceWith(renderDirectoryIcon(fileItem));
-        }
-        setActive(fileItem.path);
-    };
+    if (opts.onClick) {
+        element.onclick = (e) => opts.onClick(path, e);
+    }
 
     if (opts.actionSuffix) {
         const action = document.createElement("div");
         action.classList.add("action");
-        action.append(opts.actionSuffix(fileItem));
-        fileItem.element.append(action);
+        action.append(opts.actionSuffix(path));
+        element.append(action);
     }
 
     return element;
