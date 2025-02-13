@@ -3,6 +3,7 @@ import "./file-tree.css";
 type Path = {
     isDirectory: boolean;
     components: string[];
+    parent: Path;
     equals: (path: Path) => boolean;
     isParentOf: (path: Path) => boolean;
     isChildOf: (path: Path) => boolean;
@@ -72,13 +73,16 @@ function createPathWithComponents(
     const p: Path = {
         isDirectory,
         components,
+        get parent() {
+            return components.length === 1 ? null : createPathWithComponents(components.slice(0, -1), true)
+        },
         equals: (path) => arrEqual(components, path.components),
         isParentOf: (path) => isPathParentOfPath(p, path),
         isChildOf: (path) => isPathParentOfPath(path, p),
         isDirectParentOf: (path) => isPathDirectParentOfPath(p, path),
         isDirectChildOf: (path) => isPathDirectParentOfPath(path, p),
         hasSameParentAs: (path) =>
-            arrEqual(components.slice(0, -1), path.components.slice(0, -1)),
+            arrEqual(p.parent?.components ?? [], path.parent?.components ?? []),
         goesAfter: (path) => sortPaths(p, path) === 1,
         createChildPath: (name, isDirectory) =>
             createPathWithComponents([...components, name], isDirectory),
@@ -420,11 +424,20 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     };
 
     const addItem = async (pathStr: string) => {
-        const tmpPath = createPath(pathStr, null);
-        if (!r.shouldBeDisplayed(tmpPath)) return;
 
-        const path = createPath(pathStr, await isDirectory(pathStr));
-        r.addPath(path);
+        let path = createPath(pathStr, null);
+        if (r.shouldBeDisplayed(path)) {
+            path = createPath(pathStr, await isDirectory(pathStr));
+            r.addPath(path)
+        };
+
+        let parent = path.parent;
+        while(parent) {
+            if(r.shouldBeDisplayed(parent)){
+                r.addPath(parent)
+            }
+            parent = parent.parent
+        }
     };
 
     const removeItem = (pathStr: string) => {
