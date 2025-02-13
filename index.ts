@@ -168,13 +168,8 @@ function createRenderer(opts: RenderOpts) {
     };
 
     const r = {
-        shouldBeDisplayed: (path: Path) => {
-            if (path.components.length === 1) return true;
-
-            const sibling = flatList.find((fileItem) =>
-                fileItem.path.hasSameParentAs(path),
-            );
-            return !!sibling;
+        isDisplayed: (path: Path) => {
+            return !!flatList.find(fileItem => fileItem.path.equals(path));
         },
         addPath: (path: Path) => {
             const exists = flatList.find((fileItem) =>
@@ -426,17 +421,18 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     const addItem = async (pathStr: string) => {
 
         let path = createPath(pathStr, null);
-        if (r.shouldBeDisplayed(path)) {
+        if (r.isDisplayed(path.parent)) {
             path = createPath(pathStr, await isDirectory(pathStr));
-            r.addPath(path)
+            r.addPath(path);
         };
 
-        let parent = path.parent;
-        while(parent) {
-            if(r.shouldBeDisplayed(parent)){
-                r.addPath(parent)
+        path = path.parent
+        while(path) {
+            const parent = path.parent;
+            if(!parent || r.isDisplayed(parent)){
+                r.addPath(path)
             }
-            parent = parent.parent
+            path = parent
         }
     };
 
