@@ -74,7 +74,9 @@ function createPathWithComponents(
         isDirectory,
         components,
         get parent() {
-            return components.length === 1 ? null : createPathWithComponents(components.slice(0, -1), true)
+            return components.length === 1
+                ? null
+                : createPathWithComponents(components.slice(0, -1), true);
         },
         equals: (path) => arrEqual(components, path.components),
         isParentOf: (path) => isPathParentOfPath(p, path),
@@ -169,7 +171,7 @@ function createRenderer(opts: RenderOpts) {
 
     const r = {
         isDisplayed: (path: Path) => {
-            return !!flatList.find(fileItem => fileItem.path.equals(path));
+            return !!flatList.find((fileItem) => fileItem.path.equals(path));
         },
         addPath: (path: Path) => {
             const exists = flatList.find((fileItem) =>
@@ -419,20 +421,24 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     };
 
     const addItem = async (pathStr: string) => {
-
         let path = createPath(pathStr, null);
-        if (r.isDisplayed(path.parent)) {
+        const parent = path.parent;
+        if (r.isDisplayed(parent) && openedDirectory.has(parent.toString())) {
             path = createPath(pathStr, await isDirectory(pathStr));
             r.addPath(path);
-        };
+        }
 
-        path = path.parent
-        while(path) {
+        path = parent;
+        while (path) {
             const parent = path.parent;
-            if(!parent || r.isDisplayed(parent)){
-                r.addPath(path)
+            if (
+                !parent ||
+                (r.isDisplayed(parent) &&
+                    openedDirectory.has(parent.toString()))
+            ) {
+                r.addPath(path);
             }
-            path = parent
+            path = parent;
         }
     };
 
@@ -449,7 +455,7 @@ export function createFileTree(opts: CreateFileTreeOpts) {
 
     const refreshItem = (pathStr: string) => {
         r.refreshPath(createPath(pathStr, null));
-    }
+    };
 
     readDirectory("").then((rootItems) => {
         const rootPaths = rootItems.map(({ name, isDirectory }) =>
