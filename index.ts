@@ -423,7 +423,10 @@ export function createFileTree(opts: CreateFileTreeOpts) {
     const addItem = async (pathStr: string) => {
         let path = createPath(pathStr, null);
         const parent = path.parent;
-        if (r.isDisplayed(parent) && openedDirectory.has(parent.toString())) {
+        if (
+            !parent ||
+            (r.isDisplayed(parent) && openedDirectory.has(parent.toString()))
+        ) {
             path = createPath(pathStr, await isDirectory(pathStr));
             r.addPath(path);
         }
