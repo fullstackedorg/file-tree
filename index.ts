@@ -126,7 +126,7 @@ type RenderOpts = {
     itemHeight: number;
     indentWidth: number;
     isActive: (path: Path) => boolean;
-    name: (name: string) => HTMLElement | string;
+    name: (path: Path) => HTMLElement | string;
     prefix: (path: Path) => HTMLElement;
     suffix: (path: Path) => HTMLElement;
     classes: (path: Path) => string[];
@@ -264,7 +264,7 @@ type CreateFileTreeOpts = {
         open: HTMLElement;
         close: HTMLElement;
     };
-    name?: (suggestedName: string) => HTMLElement;
+    name?: (pathStr: string) => HTMLElement;
     suffix?: (pathStr: string) => HTMLElement;
     prefix?: (pathStr: string) => HTMLElement;
     classes?: (pathStr: string) => string[];
@@ -349,7 +349,7 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         itemHeight: opts.itemHeight || 25,
         indentWidth: opts.indentWidth || 20,
         isActive: (path) => activePaths.has(path.toString()),
-        name: (name) => opts.name?.(name) || name,
+        name: (path) => opts.name?.(path.toString()) || path.components.at(-1),
         prefix: (path) => {
             if (path.isDirectory) return createDirectoryIcon(path);
             return opts.prefix?.(path.toString());
@@ -539,7 +539,7 @@ function createFileItemElement(path: Path, opts: RenderOpts) {
     }
 
     const name = document.createElement("div");
-    name.append(opts.name(path.components.at(-1)))
+    name.append(opts.name(path))
     element.append(name);
 
     if (opts.onClick) {
