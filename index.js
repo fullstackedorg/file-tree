@@ -70,6 +70,11 @@ const fileTree = createFileTree({
         div.innerText = "···";
         return div;
     },
+    name: (name) => {
+        // const input = document.createElement("input");
+        // input.value = name;
+        // return input;
+    },
     classes: (path) => {
         if(colorCache.has(path)) return ["red"]
         return []
