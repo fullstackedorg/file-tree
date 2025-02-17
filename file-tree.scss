@@ -1,0 +1,36 @@
+.file-tree {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    > .scrollable {
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        position: relative;
+        > .file-items {
+            width: max-content;
+            min-width: 100%;
+            position: relative;
+            > .file-item {
+                display: flex;
+                align-items: center;
+                width: 100%;
+                &:hover {
+                    background-color: gray;
+                }
+                &.active {
+                    background-color: darkblue;
+                }
+                .indent {
+                    height: 100%;
+                    > div {
+                        height: 100%;
+                        width: 50%;
+                        border-right: 1px solid white;
+                        opacity: 0.2;
+                    }
+                }
+            }
+        }
+    }
+}

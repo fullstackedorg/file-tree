@@ -1,5 +1,3 @@
-import "./file-tree.css";
-
 type Path = {
     isDirectory: boolean;
     components: string[];
