@@ -133,6 +133,7 @@ type RenderOpts = {
     suffix: (path: Path) => HTMLElement;
     classes: (path: Path) => string[];
     onClick: (path: Path, e: MouseEvent) => void;
+    onMove: (oldPath: Path, newPath: Path) => void;
 };
 
 type InternalAPI = {
@@ -150,7 +151,7 @@ function createRenderer(opts: RenderOpts) {
     const getPathFromElement = (element: Element) =>
         flatList.find((i) => i.element === element)?.path;
 
-    const preventMobileScroll = (e) => e.preventDefault();
+    const preventMobileScroll = (e: TouchEvent) => e.preventDefault();
 
     const onDown = (path: Path) => () => {
         movingPath = path;
@@ -178,6 +179,32 @@ function createRenderer(opts: RenderOpts) {
     };
 
     let pathOver: Path;
+
+    const removeClassPathOver = () => {
+        if (!pathOver) return;
+        if (pathOver.isDirectory) {
+            getElementFromPath(pathOver)?.classList?.remove(
+                "file-tree-moving-over",
+            );
+        } else {
+            getElementFromPath(pathOver.parent)?.classList?.remove(
+                "file-tree-moving-over",
+            );
+        }
+    };
+    const addClassPathOver = () => {
+        if (!pathOver) return;
+        if (pathOver.isDirectory) {
+            getElementFromPath(pathOver)?.classList?.add(
+                "file-tree-moving-over",
+            );
+        } else {
+            getElementFromPath(pathOver.parent)?.classList?.add(
+                "file-tree-moving-over",
+            );
+        }
+    };
+
     const onMove = (e: MouseEvent | TouchEvent) => {
         if (!movingPath) return;
         const pos = getPos(e);
@@ -192,31 +219,9 @@ function createRenderer(opts: RenderOpts) {
 
         if (pathOver === p) return;
 
-        if (pathOver) {
-            if (pathOver.isDirectory) {
-                getElementFromPath(pathOver)?.classList?.remove(
-                    "file-tree-moving-over",
-                );
-            } else {
-                getElementFromPath(pathOver.parent)?.classList?.remove(
-                    "file-tree-moving-over",
-                );
-            }
-        }
-
+        removeClassPathOver();
         pathOver = p;
-
-        if (pathOver) {
-            if (pathOver.isDirectory) {
-                getElementFromPath(pathOver)?.classList?.add(
-                    "file-tree-moving-over",
-                );
-            } else {
-                getElementFromPath(pathOver.parent)?.classList?.add(
-                    "file-tree-moving-over",
-                );
-            }
-        }
+        addClassPathOver();
     };
 
     const onUp = () => {
@@ -231,6 +236,7 @@ function createRenderer(opts: RenderOpts) {
         movingPath = null;
 
         if (!pathOver) return;
+        removeClassPathOver();
 
         const newPath = pathOver.isDirectory
             ? pathOver.createChildPath(
@@ -488,6 +494,9 @@ export function createFileTree(opts: CreateFileTreeOpts) {
                 metaKey: e.metaKey || e.ctrlKey,
                 shiftKey: e.shiftKey,
             });
+        },
+        onMove: (oldPath, newPath) => {
+            opts?.onRename?.(oldPath.toString(), newPath.toString());
         },
     };
 
