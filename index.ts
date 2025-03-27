@@ -605,7 +605,10 @@ function removeTooltip() {
 }
 
 let movingPath: Path;
-function onDown(this: Path) {
+function onDown(this: Path, e) {
+e.preventDefault()
+    e.stopPropagation()
+
     movingPath = this;
     window.addEventListener("mousemove", onMove);
     window.addEventListener("touchmove", onMove);
@@ -613,6 +616,8 @@ function onDown(this: Path) {
     window.addEventListener("touchend", onUp);
 }
 function onMove(e: MouseEvent | TouchEvent) {
+   e.preventDefault();
+    e.stopPropagation();
     if (!tooltip) {
         createTooltip(movingPath);
     }
@@ -665,7 +670,7 @@ function setupDraggable(element: HTMLElement, path: Path, api: ElementAPI) {
     element.addEventListener("mousedown", onDown.bind(path));
     element.addEventListener("touchstart", onDown.bind(path));
 
-    element.addEventListener("mouseover", () => {
+const onMouseOver = () => {
         if (!movingPath) return;
 
         setElementPathOver({
@@ -674,5 +679,8 @@ function setupDraggable(element: HTMLElement, path: Path, api: ElementAPI) {
                 ? element
                 : api.getElementFromPath(path.parent),
         });
-    });
+}
+    
+    element.addEventListener("mouseover", onMouseOver);
+
 }
