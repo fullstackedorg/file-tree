@@ -143,7 +143,12 @@ type InternalAPI = {
 function createRenderer(opts: RenderOpts) {
     const flatList: FileItem[] = [];
 
-    let movingPath: Path, tooltip: HTMLDivElement;
+    let downStart = 0,
+        firstMove = false,
+        enableInterval = 1000,
+        enabled = false,
+        movingPath: Path,
+        tooltip: HTMLDivElement;
 
     const getElementFromPath = (path: Path) =>
         flatList.find((i) => i.path.equals(path))?.element;
@@ -153,15 +158,14 @@ function createRenderer(opts: RenderOpts) {
 
     const preventMobileScroll = (e: TouchEvent) => e.preventDefault();
 
-    const onDown = (path: Path) => () => {
+    const onDown = (path: Path) => (e: MouseEvent | TouchEvent) => {
+        downStart = Date.now();
         movingPath = path;
+        enableInterval = e instanceof MouseEvent ? 10 : 500;
         window.addEventListener("mousemove", onMove);
         window.addEventListener("touchmove", onMove);
         window.addEventListener("mouseup", onUp);
         window.addEventListener("touchend", onUp);
-        document.addEventListener("touchmove", preventMobileScroll, {
-            passive: false,
-        });
     };
 
     const setTooltipPos = (pos: [number, number]) => {
@@ -206,7 +210,18 @@ function createRenderer(opts: RenderOpts) {
     };
 
     const onMove = (e: MouseEvent | TouchEvent) => {
-        if (!movingPath) return;
+        if (!firstMove) {
+            firstMove = true;
+            console.log(Date.now() - downStart);
+            enabled = Date.now() - downStart > enableInterval;
+
+            if (enabled) {
+                document.addEventListener("touchmove", preventMobileScroll, {
+                    passive: false,
+                });
+            }
+        }
+        if (!movingPath || !enabled) return;
         const pos = getPos(e);
         setTooltipPos(getPos(e));
         const elementsFromPoint = document.elementsFromPoint(...pos);
@@ -225,6 +240,8 @@ function createRenderer(opts: RenderOpts) {
     };
 
     const onUp = () => {
+        firstMove = false;
+        enabled = false;
         removeTooltip();
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("touchmove", onMove);
