@@ -14,7 +14,7 @@ type Path = {
 };
 
 function arrEqual<T>(arr1: T[], arr2: T[]) {
-    if (arr1.length !== arr2.length) {
+    if (!arr1 || !arr2 || arr1.length !== arr2.length) {
         return false;
     }
 
@@ -76,7 +76,7 @@ function createPathWithComponents(
                 ? null
                 : createPathWithComponents(components.slice(0, -1), true);
         },
-        equals: (path) => arrEqual(components, path.components),
+        equals: (path) => arrEqual(components, path?.components),
         isParentOf: (path) => isPathParentOfPath(p, path),
         isChildOf: (path) => isPathParentOfPath(path, p),
         isDirectParentOf: (path) => isPathDirectParentOfPath(p, path),
@@ -99,15 +99,19 @@ type FileItem = {
     insertAfter: (fileItem: FileItem) => void;
 };
 
-function createFileItem(path: Path, opts: RenderOpts): FileItem {
-    let element = createFileItemElement(path, opts);
+function createFileItem(
+    path: Path,
+    opts: RenderOpts,
+    api: ElementAPI,
+): FileItem {
+    let element = createFileItemElement(path, opts, api);
     const f: FileItem = {
         path,
         get element() {
             return element;
         },
         refresh: () => {
-            const updatedElement = createFileItemElement(path, opts);
+            const updatedElement = createFileItemElement(path, opts, api);
             element.replaceWith(updatedElement);
             element = updatedElement;
         },
@@ -131,11 +135,18 @@ type RenderOpts = {
     onClick: (path: Path, e: MouseEvent) => void;
 };
 
+type ElementAPI = {
+    getElementFromPath: (path: Path) => HTMLElement;
+};
+
 function createRenderer(opts: RenderOpts) {
     const flatList: FileItem[] = [];
 
+    const getElementFromPath = (path: Path) =>
+        flatList.find((i) => i.path.equals(path))?.element;
+
     const addRootPath = (path: Path) => {
-        const fileItem = createFileItem(path, opts);
+        const fileItem = createFileItem(path, opts, { getElementFromPath });
 
         // first element
         if (flatList.length === 0) {
@@ -195,7 +206,7 @@ function createRenderer(opts: RenderOpts) {
 
             const parentFileItem = flatList[indexOfDirectParent];
 
-            const fileItem = createFileItem(path, opts);
+            const fileItem = createFileItem(path, opts, { getElementFromPath });
 
             for (let i = indexOfDirectParent + 1; i < flatList.length; i++) {
                 if (
@@ -267,6 +278,7 @@ type CreateFileTreeOpts = {
     prefix?: (pathStr: string) => HTMLElement;
     classes?: (pathStr: string) => string[];
     onSelect?: (pathStr: string) => void;
+    onRename?: (olPathStr: string, newPathStr: string) => void;
 };
 
 function defaultDirectoryIcon(open: boolean) {
@@ -305,6 +317,10 @@ export function createFileTree(opts: CreateFileTreeOpts) {
 
     const container = document.createElement("div");
     container.classList.add("file-tree");
+
+    container.addEventListener("mouseout", () => {
+        setElementPathOver(null);
+    });
 
     const scrollable = document.createElement("div");
     scrollable.classList.add("scrollable");
@@ -473,7 +489,7 @@ export function createFileTree(opts: CreateFileTreeOpts) {
         addItem,
         removeItem,
         refreshItem,
-        getActiveItems: () => activePaths
+        getActiveItems: () => activePaths,
     };
 }
 
@@ -500,7 +516,7 @@ function filterInPlace<T>(
     return r;
 }
 
-function createFileItemElement(path: Path, opts: RenderOpts) {
+function createFileItemElement(path: Path, opts: RenderOpts, api: ElementAPI) {
     const depth = path.components.length - 1;
     const element = document.createElement("div");
     element.classList.add("file-item");
@@ -537,7 +553,7 @@ function createFileItemElement(path: Path, opts: RenderOpts) {
     }
 
     const name = document.createElement("div");
-    name.append(opts.name(path))
+    name.append(opts.name(path));
     element.append(name);
 
     if (opts.onClick) {
@@ -555,5 +571,108 @@ function createFileItemElement(path: Path, opts: RenderOpts) {
         element.append(action);
     }
 
+    setupDraggable(element, path, api);
+
     return element;
+}
+
+function getPos(e: MouseEvent | TouchEvent): [number, number] {
+    if (e instanceof MouseEvent) {
+        return [e.clientX, e.clientY];
+    } else {
+        return [e.touches[0].clientX, e.touches[0].clientY];
+    }
+}
+
+let tooltip: HTMLDivElement;
+function createTooltip(path: Path) {
+    if (tooltip) {
+        removeTooltip();
+    }
+    tooltip = document.createElement("div");
+    tooltip.classList.add("file-tree-tooltip");
+    tooltip.innerText = path.toString();
+    document.body.append(tooltip);
+}
+function setTooltipPos(pos: [number, number]) {
+    if (!tooltip) return;
+    tooltip.style.left = pos.at(0) + "px";
+    tooltip.style.top = pos.at(1) + "px";
+}
+function removeTooltip() {
+    tooltip?.remove();
+    tooltip = null;
+}
+
+let movingPath: Path;
+function onDown(this: Path) {
+    movingPath = this;
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("touchmove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchend", onUp);
+}
+function onMove(e: MouseEvent | TouchEvent) {
+    if (!tooltip) {
+        createTooltip(movingPath);
+    }
+    setTooltipPos(getPos(e));
+}
+function onUp() {
+    removeTooltip();
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("touchmove", onMove);
+    window.removeEventListener("mouseup", onUp);
+    window.removeEventListener("touchend", onUp);
+
+    if (
+        elementPathOver &&
+        !elementPathOver?.path?.isDirectParentOf(movingPath)
+    ) {
+        const oldPath = movingPath.toString();
+        const newPath = elementPathOver?.path
+            ? elementPathOver.path
+                  .createChildPath(
+                      movingPath.components.at(-1),
+                      movingPath.isDirectory,
+                  )
+                  .toString()
+            : createPath(
+                  movingPath.components.at(-1),
+                  movingPath.isDirectory,
+              ).toString();
+
+        if (oldPath !== newPath) {
+            console.log(oldPath, newPath);
+        }
+    }
+
+    movingPath = null;
+    setElementPathOver(null);
+}
+
+let elementPathOver: {
+    element: HTMLElement;
+    path: Path;
+};
+function setElementPathOver(elementPath: typeof elementPathOver) {
+    elementPathOver?.element?.classList?.remove("file-tree-moving-over");
+    elementPathOver = elementPath;
+    elementPathOver?.element?.classList?.add("file-tree-moving-over");
+}
+
+function setupDraggable(element: HTMLElement, path: Path, api: ElementAPI) {
+    element.addEventListener("mousedown", onDown.bind(path));
+    element.addEventListener("touchstart", onDown.bind(path));
+
+    element.addEventListener("mouseover", () => {
+        if (!movingPath) return;
+
+        setElementPathOver({
+            path: path.isDirectory ? path : path.parent,
+            element: path.isDirectory
+                ? element
+                : api.getElementFromPath(path.parent),
+        });
+    });
 }
