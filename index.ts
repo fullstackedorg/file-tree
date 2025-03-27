@@ -150,12 +150,17 @@ function createRenderer(opts: RenderOpts) {
     const getPathFromElement = (element: Element) =>
         flatList.find((i) => i.element === element)?.path;
 
+    const preventMobileScroll = (e) => e.preventDefault();
+
     const onDown = (path: Path) => () => {
         movingPath = path;
         window.addEventListener("mousemove", onMove);
         window.addEventListener("touchmove", onMove);
         window.addEventListener("mouseup", onUp);
         window.addEventListener("touchend", onUp);
+        document.addEventListener("touchmove", preventMobileScroll, {
+            passive: false,
+        });
     };
 
     const setTooltipPos = (pos: [number, number]) => {
@@ -220,10 +225,11 @@ function createRenderer(opts: RenderOpts) {
         window.removeEventListener("touchmove", onMove);
         window.removeEventListener("mouseup", onUp);
         window.removeEventListener("touchend", onUp);
+        document.removeEventListener("touchmove", preventMobileScroll);
 
         const oldPath = movingPath;
         movingPath = null;
-        
+
         if (!pathOver) return;
 
         const newPath = pathOver.isDirectory
@@ -236,13 +242,10 @@ function createRenderer(opts: RenderOpts) {
                     oldPath.components.at(-1),
                     oldPath.isDirectory,
                 )
-              : createPath(
-                    oldPath.components.at(-1),
-                    oldPath.isDirectory,
-                );
+              : createPath(oldPath.components.at(-1), oldPath.isDirectory);
 
-        if(!oldPath.equals(newPath)) {
-            console.log(oldPath.toString(), newPath.toString())
+        if (!oldPath.equals(newPath)) {
+            console.log(oldPath.toString(), newPath.toString());
         }
     };
 
