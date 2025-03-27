@@ -102,7 +102,7 @@ type FileItem = {
 function createFileItem(
     path: Path,
     opts: RenderOpts,
-    api: ElementAPI,
+    api: InternalAPI,
 ): FileItem {
     let element = createFileItemElement(path, opts, api);
     const f: FileItem = {
@@ -135,18 +135,129 @@ type RenderOpts = {
     onClick: (path: Path, e: MouseEvent) => void;
 };
 
-type ElementAPI = {
-    getElementFromPath: (path: Path) => HTMLElement;
+type InternalAPI = {
+    makeDraggable: (path: Path, element: HTMLDivElement) => void;
 };
 
 function createRenderer(opts: RenderOpts) {
     const flatList: FileItem[] = [];
 
+    let movingPath: Path, tooltip: HTMLDivElement;
+
     const getElementFromPath = (path: Path) =>
         flatList.find((i) => i.path.equals(path))?.element;
 
+    const getPathFromElement = (element: Element) =>
+        flatList.find((i) => i.element === element)?.path;
+
+    const onDown = (path: Path) => () => {
+        movingPath = path;
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("touchmove", onMove);
+        window.addEventListener("mouseup", onUp);
+        window.addEventListener("touchend", onUp);
+    };
+
+    const setTooltipPos = (pos: [number, number]) => {
+        if (!movingPath) return;
+        if (!tooltip) {
+            tooltip = createTooltip(movingPath);
+        }
+        tooltip.style.left = pos.at(0) + "px";
+        tooltip.style.top = pos.at(1) + "px";
+    };
+
+    const removeTooltip = () => {
+        tooltip?.remove();
+        tooltip = null;
+    };
+
+    let pathOver: Path;
+    const onMove = (e: MouseEvent | TouchEvent) => {
+        if (!movingPath) return;
+        const pos = getPos(e);
+        setTooltipPos(getPos(e));
+        const elementsFromPoint = document.elementsFromPoint(...pos);
+
+        let p: Path = null;
+        for (const el of elementsFromPoint) {
+            p = getPathFromElement(el);
+            if (p) break;
+        }
+
+        if (pathOver === p) return;
+
+        if (pathOver) {
+            if (pathOver.isDirectory) {
+                getElementFromPath(pathOver)?.classList?.remove(
+                    "file-tree-moving-over",
+                );
+            } else {
+                getElementFromPath(pathOver.parent)?.classList?.remove(
+                    "file-tree-moving-over",
+                );
+            }
+        }
+
+        pathOver = p;
+
+        if (pathOver) {
+            if (pathOver.isDirectory) {
+                getElementFromPath(pathOver)?.classList?.add(
+                    "file-tree-moving-over",
+                );
+            } else {
+                getElementFromPath(pathOver.parent)?.classList?.add(
+                    "file-tree-moving-over",
+                );
+            }
+        }
+    };
+
+    const onUp = () => {
+        removeTooltip();
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("touchmove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        window.removeEventListener("touchend", onUp);
+
+        const oldPath = movingPath;
+        movingPath = null;
+        
+        if (!pathOver) return;
+
+        const newPath = pathOver.isDirectory
+            ? pathOver.createChildPath(
+                  oldPath.components.at(-1),
+                  oldPath.isDirectory,
+              )
+            : pathOver.parent
+              ? pathOver.parent.createChildPath(
+                    oldPath.components.at(-1),
+                    oldPath.isDirectory,
+                )
+              : createPath(
+                    oldPath.components.at(-1),
+                    oldPath.isDirectory,
+                );
+
+        if(!oldPath.equals(newPath)) {
+            console.log(oldPath.toString(), newPath.toString())
+        }
+    };
+
+    const makeDraggable = (path: Path, element: HTMLDivElement) => {
+        const start = onDown(path);
+        element.addEventListener("mousedown", start);
+        element.addEventListener("touchstart", start);
+    };
+
+    const api = {
+        makeDraggable,
+    };
+
     const addRootPath = (path: Path) => {
-        const fileItem = createFileItem(path, opts, { getElementFromPath });
+        const fileItem = createFileItem(path, opts, api);
 
         // first element
         if (flatList.length === 0) {
@@ -206,7 +317,7 @@ function createRenderer(opts: RenderOpts) {
 
             const parentFileItem = flatList[indexOfDirectParent];
 
-            const fileItem = createFileItem(path, opts, { getElementFromPath });
+            const fileItem = createFileItem(path, opts, api);
 
             for (let i = indexOfDirectParent + 1; i < flatList.length; i++) {
                 if (
@@ -317,10 +428,6 @@ export function createFileTree(opts: CreateFileTreeOpts) {
 
     const container = document.createElement("div");
     container.classList.add("file-tree");
-
-    container.addEventListener("mouseout", () => {
-        setElementPathOver(null);
-    });
 
     const scrollable = document.createElement("div");
     scrollable.classList.add("scrollable");
@@ -516,7 +623,7 @@ function filterInPlace<T>(
     return r;
 }
 
-function createFileItemElement(path: Path, opts: RenderOpts, api: ElementAPI) {
+function createFileItemElement(path: Path, opts: RenderOpts, api: InternalAPI) {
     const depth = path.components.length - 1;
     const element = document.createElement("div");
     element.classList.add("file-item");
@@ -571,7 +678,7 @@ function createFileItemElement(path: Path, opts: RenderOpts, api: ElementAPI) {
         element.append(action);
     }
 
-    setupDraggable(element, path, api);
+    api.makeDraggable(path, element);
 
     return element;
 }
@@ -584,103 +691,10 @@ function getPos(e: MouseEvent | TouchEvent): [number, number] {
     }
 }
 
-let tooltip: HTMLDivElement;
 function createTooltip(path: Path) {
-    if (tooltip) {
-        removeTooltip();
-    }
-    tooltip = document.createElement("div");
+    const tooltip = document.createElement("div");
     tooltip.classList.add("file-tree-tooltip");
     tooltip.innerText = path.toString();
     document.body.append(tooltip);
-}
-function setTooltipPos(pos: [number, number]) {
-    if (!tooltip) return;
-    tooltip.style.left = pos.at(0) + "px";
-    tooltip.style.top = pos.at(1) + "px";
-}
-function removeTooltip() {
-    tooltip?.remove();
-    tooltip = null;
-}
-
-let movingPath: Path;
-function onDown(this: Path, e) {
-e.preventDefault()
-    e.stopPropagation()
-
-    movingPath = this;
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("touchmove", onMove);
-    window.addEventListener("mouseup", onUp);
-    window.addEventListener("touchend", onUp);
-}
-function onMove(e: MouseEvent | TouchEvent) {
-   e.preventDefault();
-    e.stopPropagation();
-    if (!tooltip) {
-        createTooltip(movingPath);
-    }
-    setTooltipPos(getPos(e));
-}
-function onUp() {
-    removeTooltip();
-    window.removeEventListener("mousemove", onMove);
-    window.removeEventListener("touchmove", onMove);
-    window.removeEventListener("mouseup", onUp);
-    window.removeEventListener("touchend", onUp);
-
-    if (
-        elementPathOver &&
-        !elementPathOver?.path?.isDirectParentOf(movingPath)
-    ) {
-        const oldPath = movingPath.toString();
-        const newPath = elementPathOver?.path
-            ? elementPathOver.path
-                  .createChildPath(
-                      movingPath.components.at(-1),
-                      movingPath.isDirectory,
-                  )
-                  .toString()
-            : createPath(
-                  movingPath.components.at(-1),
-                  movingPath.isDirectory,
-              ).toString();
-
-        if (oldPath !== newPath) {
-            console.log(oldPath, newPath);
-        }
-    }
-
-    movingPath = null;
-    setElementPathOver(null);
-}
-
-let elementPathOver: {
-    element: HTMLElement;
-    path: Path;
-};
-function setElementPathOver(elementPath: typeof elementPathOver) {
-    elementPathOver?.element?.classList?.remove("file-tree-moving-over");
-    elementPathOver = elementPath;
-    elementPathOver?.element?.classList?.add("file-tree-moving-over");
-}
-
-function setupDraggable(element: HTMLElement, path: Path, api: ElementAPI) {
-    element.addEventListener("mousedown", onDown.bind(path));
-    element.addEventListener("touchstart", onDown.bind(path));
-
-const onMouseOver = () => {
-        if (!movingPath) return;
-
-        setElementPathOver({
-            path: path.isDirectory ? path : path.parent,
-            element: path.isDirectory
-                ? element
-                : api.getElementFromPath(path.parent),
-        });
-}
-    
-    element.addEventListener("mouseover", onMouseOver);
-
+    return tooltip;
 }
